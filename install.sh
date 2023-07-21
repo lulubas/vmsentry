@@ -35,25 +35,23 @@ initial_checks() {
 
     #Detecting system OS
     OS=""
-    {
-        if [ -f /etc/os-release ]; then
-            . /etc/os-release
-            OS=$NAME
-            echo "OS detected from /etc/os-release: $OS"
-        elif command -v lsb_release >/dev/null 2>&1; then
-            OS=$(lsb_release -si)
-            echo "OS detected from lsb_release:$OS"
-        elif [ -f /etc/debian_version ]; then
-            OS=Debian
-            echo "OS detected from /etc/debian_version: $OS"
-        elif [ -f /etc/redhat-release ]; then
-            OS=Redhat
-            echo "OS detected from /etc/redhat-release: $OS"
-        else
-            OS=$(uname -s)
-            echo "OS detected from uname: $OS"
-        fi
-    } | tee -a $LOG_FILE
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        OS=$NAME
+        echo "OS detected from /etc/os-release: $OS" | tee -a $LOG_FILE
+    elif command -v lsb_release >/dev/null 2>&1; then
+        OS=$(lsb_release -si)
+        echo "OS detected from lsb_release:$OS" | tee -a $LOG_FILE
+    elif [ -f /etc/debian_version ]; then
+        OS=Debian
+        echo "OS detected from /etc/debian_version: $OS" | tee -a $LOG_FILE
+    elif [ -f /etc/redhat-release ]; then
+        OS=Redhat
+        echo "OS detected from /etc/redhat-release: $OS" | tee -a $LOG_FILE
+    else
+        OS=$(uname -s)
+        echo "OS detected from uname: $OS" | tee -a $LOG_FILE
+    fi
 
     # Check if the OS is supported, if not exit
     OS=$(echo "$OS" | awk '{$1=$1};1' | awk '{print tolower($0)}')
