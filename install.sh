@@ -66,9 +66,9 @@ install_script() {
     if ! command -v unzip &> /dev/null; then
         echo "Unzip could not be found" | tee -a $LOG_FILE
         echo "Attempting to install unzip..." | tee -a $LOG_FILE
-        if [ "$OS" == "Ubuntu" ] || [ "$OS" == "Debian" ]; then
+        if [ "$OS" == "ubuntu" ] || [ "$OS" == "debian" ]; then
             apt-get install unzip -y >/dev/null 2>&1 || { echo "Failed to install unzip on $OS" | tee -a $LOG_FILE ; exit 1; }
-        elif [ "$OS" == "CentOS" ] || [ "$OS" == "Redhat" ]; then
+        elif [ "$OS" == "centos linux" ] || [ "$OS" == "red hat enterprise linux" ]; then
             yum install unzip -y >/dev/null 2>&1 || { echo "Failed to install unzip on $OS" | tee -a $LOG_FILE ; exit 1; }
         else
             echo "OS not supported for automatic unzip installation" | tee -a $LOG_FILE
@@ -99,10 +99,10 @@ install_python() {
         echo "Python 3 is already installed"
     else
         echo "Python 3 is not yet installed. Starting installation now..."
-        if [[ "$OS" == "Ubuntu" || "$OS" == "Debian" ]]; then
+        if [[ "$OS" == "ubuntu" || "$OS" == "debian" ]]; then
             apt-get update | tee -a $LOG_FILE || { echo 'Updating packages failed' | tee -a $LOG_FILE ; exit 1; }
             apt-get install python3 -y | tee -a $LOG_FILE || { echo 'Python3 installation failed' | tee -a $LOG_FILE ; exit 1; }
-        elif [[ "$OS" == "CentOS Linux" || "$OS" == "AlmaLinux" || "$OS" == "Red Hat Enterprise Linux" ]]; then
+        elif [[ "$OS" == "centos linux" || "$OS" == "almalinux" || "$OS" == "red hat enterprise linux" ]]; then
             yum install python3 -y | tee -a $LOG_FILE || { echo 'Python3 installation failed' | tee -a $LOG_FILE ; exit 1; }
         else
             echo "Python installation not supported on this OS"
@@ -124,9 +124,9 @@ install_mta() {
         echo "No MTA detected. Do you want to install Postfix? (y/n)"
         read answer
         if [[ "$answer" == "y" || "$answer" == "Y" ]]; then
-            if [[ "$OS" == "Ubuntu" || "$OS" == "Debian" ]]; then
+            if [[ "$OS" == "ubuntu" || "$OS" == "debian" ]]; then
                 apt-get install postfix -y | tee -a $LOG_FILE || { echo 'Postfix installation failed. Exiting.' | tee -a $LOG_FILE ; exit 1; }
-            elif [[ "$OS" == "CentOS Linux" || "$OS" == "AlmaLinux" || "$OS" == "Red Hat Enterprise Linux" ]]; then
+            elif [[ "$OS" == "centOS linux" || "$OS" == "almalinux" || "$OS" == "red hat enterprise linux" ]]; then
                 yum install postfix -y | tee -a $LOG_FILE  || { echo 'Postfix installation failed. Exiting.' | tee -a $LOG_FILE ; exit 1; }
             else
                 echo "Postfix installation not supported on this OS"
