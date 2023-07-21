@@ -42,7 +42,7 @@ initial_checks() {
             echo "OS detected from /etc/os-release: $OS"
         elif command -v lsb_release >/dev/null 2>&1; then
             OS=$(lsb_release -si)
-            echo "OS detected from lsb_release: $OS"
+            echo "OS detected from lsb_release:$OS"
         elif [ -f /etc/debian_version ]; then
             OS=Debian
             echo "OS detected from /etc/debian_version: $OS"
@@ -56,8 +56,9 @@ initial_checks() {
     } | tee -a $LOG_FILE
 
     # Check if the OS is supported, if not exit
-    if ! [[ "$OS" == "Ubuntu" || "$OS" == "Debian" || "$OS" == "CentOS Linux" || "$OS" == "AlmaLinux" || "$OS" == "Red Hat Enterprise Linux" ]]; then
-        echo "OS not supported: $OS. Exiting." | tee -a $LOG_FILE
+    OS=$(echo "$OS" | awk '{$1=$1};1' | awk '{print tolower($0)}')
+    if ! [[ "$OS" == "ubuntu" || "$OS" == "debian" || "$OS" == "centos linux" || "$OS" == "almalinux" || "$OS" == "red hat enterprise linux" ]]; then
+        echo "OS not supported: $OS. VMsentry only compatible with Ubuntu, Debian, CentOS, RHEL and AlmaLinux. Exiting." | tee -a $LOG_FILE
         exit 1
     fi
 }
