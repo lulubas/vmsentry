@@ -165,7 +165,17 @@ setup_iptables() {
     iptables -A LOG_ONLY -j ACCEPT || { echo 'Failed to add ACCEPT rule to LOG_ONLY chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
     echo "LOG_ONLY chain created and LOG and ACCEPT rules added" | tee -a $LOG_FILE
 
-    MAIN_IFACE=$(ip route show default | awk '/default/ {print $5}' | sed -n 2p)
+    if [ $(ip route show default | awk '/default/ {print $5}' | wc -l) == 1 ]; then
+        MAIN_IFACE="$(ip route show default | awk '/default/ {print $5}')"
+    else
+        MAIN_IFACE="$(ip route show default | awk '/default/ {print $5}' | sed -n 2p)"
+    fi
+
+    if [ -z "$MAIN_IFACE" ]; then
+        echo "Main network interface not detected properly: $MAIN_IFACE". Exiting. | tee -a $LOG_FILE
+        exit 1
+    fi 
+    
     echo "Main network interface detected: $MAIN_IFACE" | tee -a $LOG_FILE
     iptables -I FORWARD -o $MAIN_IFACE -p tcp --dport 25 -j LOG_ONLY || { echo 'Failed to add LOG_ONLY rule to FORWARD chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
     echo "Port 25 traffic redirected to LOG_ONLY chain" | tee -a $LOG_FILE
