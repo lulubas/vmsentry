@@ -23,6 +23,16 @@ initial_checks() {
         echo "VMsentry does not exist on the system. Pursuing installation..."
     fi
 
+    # Create necessary directories
+    mkdir -p $SCRIPT_DIR >/dev/null 2>&1 || { echo "Failed to create $SCRIPT_DIR" | tee -a $LOG_FILE ; exit 1; }
+    mkdir -p $LOG_DIR >/dev/null 2>&1 || { echo "Failed to create $LOG_DIR" | tee -a $LOG_FILE ; exit 1; }
+    echo "Required directories created successfully" | tee -a $LOG_FILE
+
+    # Set up logging
+    exec > >(tee -i $LOG_FILE)
+    exec 2>&1
+    echo "Logging setup successfully" | tee -a $LOG_FILE
+
     #Detecting system OS
     OS=""
     {
@@ -53,16 +63,6 @@ initial_checks() {
 }
 
 install_script() {
-    # Create necessary directories
-    mkdir -p $SCRIPT_DIR >/dev/null 2>&1 || { echo "Failed to create $SCRIPT_DIR" | tee -a $LOG_FILE ; exit 1; }
-    mkdir -p $LOG_DIR >/dev/null 2>&1 || { echo "Failed to create $LOG_DIR" | tee -a $LOG_FILE ; exit 1; }
-    echo "Required directories created successfully" | tee -a $LOG_FILE
-
-    # Set up logging
-    exec > >(tee -i $LOG_FILE)
-    exec 2>&1
-    echo "Logging setup successfully" | tee -a $LOG_FILE
-
      # Check if unzip is installed and install it if it's not
     if ! command -v unzip &> /dev/null; then
         echo "Unzip could not be found" | tee -a $LOG_FILE
