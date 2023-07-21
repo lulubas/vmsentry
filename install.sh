@@ -105,7 +105,7 @@ install_python() {
         elif [[ "$OS" == "centos linux" || "$OS" == "almalinux" || "$OS" == "red hat enterprise linux" ]]; then
             yum install python3 -y | tee -a $LOG_FILE || { echo 'Python3 installation failed' | tee -a $LOG_FILE ; exit 1; }
         else
-            echo "Python installation not supported on this OS"
+            echo "Python installation not supported on this OS:$OS"
             exit 1
         fi
         echo "Python 3 has been installed."
@@ -129,7 +129,7 @@ install_mta() {
             elif [[ "$OS" == "centOS linux" || "$OS" == "almalinux" || "$OS" == "red hat enterprise linux" ]]; then
                 yum install postfix -y | tee -a $LOG_FILE  || { echo 'Postfix installation failed. Exiting.' | tee -a $LOG_FILE ; exit 1; }
             else
-                echo "Postfix installation not supported on this OS"
+                echo "Postfix installation not supported on this OS:$OS"
                 exit 1
             fi
             echo "Installation of Postfix successfull" | tee -a $LOG_FILE
@@ -152,7 +152,7 @@ setup_iptables() {
         elif [[ "$OS" == "CentOS Linux" || "$OS" == "AlmaLinux" || "$OS" == "Red Hat Enterprise Linux" ]]; then
             yum install iptables -y | tee -a $LOG_FILE || { echo 'IPtables installation failed. Exiting.' | tee -a $LOG_FILE ; exit 1; }
         else
-            echo "iptables installation not supported on this OS"
+            echo "iptables installation not supported on this OS:$OS"
             exit 1
         fi
         echo "iptables installation successfull" | tee -a $LOG_FILE
