@@ -17,16 +17,22 @@ initial_checks() {
     LOG_FILE="$LOG_DIR/install.log"
     
     if [ -d "$SCRIPT_DIR" ]; then
-        echo "One or more VMsentry directories already exist. Aborting installation..."
-        exit 1
-    else
-        echo "VMsentry does not exist on the system. Pursuing installation..."
+        echo "One or more VMsentry directories already exist."
+        read -p "Do you want to overwrite existing directories and pursue installation (Y/n) ?" user_input
+        if [[ "$user_input" == "y" ||"$user_input" == "Y" ]]; then
+            echo "Deleting existing vmsentry directories" | tee -a $LOG_FILE
+            rm -rf /etc/vmsentry || { echo "Failed to delete $SCRIPT_DIR" | tee -a $LOG_FILE ; exit 1; }
+        else
+            echo "Overwritting existing vmsentry direcotry cancelled. Aborting installation." | tee -a $LOG_FILE
+            exit 1
+        fi
+        echo "VMsentry directory successfully deleted." | tee -a $LOG_FILE
     fi
 
     # Create necessary directories
     mkdir -p $SCRIPT_DIR >/dev/null 2>&1 || { echo "Failed to create $SCRIPT_DIR" | tee -a $LOG_FILE ; exit 1; }
     mkdir -p $LOG_DIR >/dev/null 2>&1 || { echo "Failed to create $LOG_DIR" | tee -a $LOG_FILE ; exit 1; }
-    echo "Required directories created successfully" | tee -a $LOG_FILE
+    echo "VMsentry directories created successfully" | tee -a $LOG_FILE
 
     # Set up logging
     exec > >(tee -i $LOG_FILE)
@@ -158,36 +164,95 @@ setup_iptables() {
         echo "iptables installation successfull" | tee -a $LOG_FILE
     fi
 
-    # Seting up logging of port 25 traffic via LOG_ONLY chain
-    echo "Setting up port 25 monitoring" | tee -a $LOG_FILE
-    iptables -N LOG_ONLY >/dev/null 2>&1 || { echo 'LOG_ONLY chain already exists. Exiting.' | tee -a $LOG_FILE ; exit 1; }
-    iptables -A LOG_ONLY -j LOG --log-prefix "[VMS#0] Logged: " --log-level 4 || { echo 'Failed to add LOG rule to LOG_ONLY chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
-    iptables -A LOG_ONLY -j ACCEPT || { echo 'Failed to add ACCEPT rule to LOG_ONLY chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
+    # Setting up LOG_ONLY chain
+    echo "Setting up port 25 monitoring via a new LOG_ONLY chain" | tee -a $LOG_FILE
+    echo "Checking LOG_ONLY chain..." | tee -a $LOG_FILE
+    if iptables -L LOG_ONLY >/dev/null 2>&1; then
+        echo 'LOG_ONLY chain already exists.' | tee -a $LOG_FILE
+        read -p 'Flush the LOG_ONLY chain and recreate the rules? Say yes only if LOG_ONLY chain exists because of a previous installation. (y/n)' user_input
+            if [[ "$user_input" == "y" ||"$user_input" == "Y" ]]; then
+                echo "Flushing LOG_ONLY chain" | tee -a $LOG_FILE
+                iptables -F LOG_ONLY || { echo 'An error occured while flushing LOG_ONLY chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
+                echo "Flushing LOG_ONLY chain successfull" | tee -a $LOG_FILE
+            else
+                echo "Updating LOG_ONLY chain cancelled. Aborting installation." | tee -a $LOG_FILE
+                exit 1
+            fi
+    else
+        echo "LOG_ONLY chain does not yet exist. Adding it." | tee -a $LOG_FILE
+        iptables -N LOG_ONLY || { echo 'An error occured while creating LOG_ONLY chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
+        echo "LOG_ONLY created successfully" | tee -a $LOG_FILE
+    fi
+    echo "Adding LOG_ONLY chain rules" | tee -a $LOG_FILE
+    iptables -A LOG_ONLY -j LOG --log-prefix "[VMS#0] Logged: " --log-level 4 || { echo 'An error occured while adding LOG rule to LOG_ONLY chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
+    iptables -A LOG_ONLY -j ACCEPT || { echo 'An error occured while adding ACCEPT rule to LOG_ONLY chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
     echo "LOG_ONLY chain created and LOG and ACCEPT rules added" | tee -a $LOG_FILE
 
+    # Detecting main network interface, redirecting port 25 traffic to LOG_ONLY chain
     if [ $(ip route show default | awk '/default/ {print $5}' | wc -l) == 1 ]; then
         MAIN_IFACE="$(ip route show default | awk '/default/ {print $5}')"
     else
         MAIN_IFACE="$(ip route show default | awk '/default/ {print $5}' | sed -n 2p)"
     fi
-
     if [ -z "$MAIN_IFACE" ]; then
         echo "Main network interface not detected properly: $MAIN_IFACE". Exiting. | tee -a $LOG_FILE
         exit 1
+    else
+        echo "Main network interface detected: $MAIN_IFACE" | tee -a $LOG_FILE
+        iptables -I FORWARD -o $MAIN_IFACE -p tcp --dport 25 -j LOG_ONLY || { echo 'Failed to add LOG_ONLY rule to FORWARD chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
+        echo "Port 25 traffic redirected to LOG_ONLY chain" | tee -a $LOG_FILE
     fi
-    
-    echo "Main network interface detected: $MAIN_IFACE" | tee -a $LOG_FILE
-    iptables -I FORWARD -o $MAIN_IFACE -p tcp --dport 25 -j LOG_ONLY || { echo 'Failed to add LOG_ONLY rule to FORWARD chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
-    echo "Port 25 traffic redirected to LOG_ONLY chain" | tee -a $LOG_FILE
 
     # Setuping up the LOG_AND_DROP chain and rules
-    echo "Creating LOG_AND_DROP chain and rules" | tee -a $LOG_FILE
-    iptables -N LOG_AND_DROP >/dev/null 2>&1 || { echo 'LOG_AND_DROP chain already exists. Exiting.' | tee -a $LOG_FILE ; exit 1; }
-    iptables -A LOG_AND_DROP -j LOG --log-prefix "[VMS#1] Dropped: " --log-level 4 || { echo 'Failed to add LOG rule to LOG_AND_DROP chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
-    iptables -A LOG_AND_DROP -j DROP || { echo 'Failed to add DROP rule to LOG_AND_DROP chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
-    echo "iptables LOG_AND_DROP chain and rules created successfully" | tee -a $LOG_FILE
+    echo "Checking LOG_AND_DROP chain..." | tee -a $LOG_FILE
+    if iptables -L LOG_AND_DROP >/dev/null 2>&1; then
+        echo 'LOG_AND_DROP chain already exists.' | tee -a $LOG_FILE
+        read -p 'Flush the LOG_AND_DROP chain and recreate the rules? Say yes only if LOG_AND_DROP chain exists because of a previous installation. (y/n)' user_input
+            if [[ "$user_input" == "y" ||"$user_input" == "Y" ]]; then
+                echo "Flushing LOG_AND_DROP chain" | tee -a $LOG_FILE
+                iptables -F LOG_AND_DROP || { echo 'An error occured while flushing LOG_AND_DROP chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
+                echo "Flushing LOG_AND_DROP chain successfull" | tee -a $LOG_FILE
+            else
+                echo "Updating LOG_AND_DROP chain cancelled. Aborting installation." | tee -a $LOG_FILE
+                exit 1
+            fi
+    else
+        echo "LOG_ONLY chain does not yet exist. Adding it." | tee -a $LOG_FILE
+        iptables -N LOG_AND_DROP || { echo 'An error occured while creating LOG_AND_DROP chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
+        echo "LOG_AND_DROP created successfully" | tee -a $LOG_FILE
+    fi
+    echo "Adding LOG_AND_DROP rules" | tee -a $LOG_FILE
+    iptables -A LOG_AND_DROP -j LOG --log-prefix "[VMS#1] Dropped: " --log-level 4 || { echo 'An error occured while adding LOG rule to LOG_AND_DROP chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
+    iptables -A LOG_AND_DROP -j DROP || { echo 'An error occured while adding DROP rule to LOG_AND_DROP chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
+    echo "LOG_AND_DROP chain created and LOG and ACCEPT rules added" | tee -a $LOG_FILE
 
-    # Change the log location
+    # Change the log location via custom rsyslog configuration file
+    if  systemctl is-active --quiet rsyslog; then
+        echo "Rsyslog is running. Continuing..." | tee -a $LOG_FILE
+    else
+        echo "Rsyslog is not running. Starting rsyslog now..." | tee -a $LOG_FILE
+        systemctl start rsyslog | tee -a $LOG_FILE || { echo 'Failed to start rsyslog. Exiting.' | tee -a $LOG_FILE ; exit 1; }
+        echo "Rsyslog started successfully." | tee -a $LOG_FILE
+    fi
+
+    # Check if rsyslog is enabled
+    if systemctl is-enabled --quiet rsyslog; then
+        echo "Rsyslog is  enabled at startup. Continuing..." | tee -a $LOG_FILE
+    else
+        echo "Rsyslog is not enabled at startup. Enabling rsyslog now..." | tee -a $LOG_FILE
+        systemctl enable rsyslog | tee -a $LOG_FILE || { echo 'Failed to enable rsyslog. Exiting.' | tee -a $LOG_FILE ; exit 1; }
+    fi
+
+    echo "Checking Rsyslog conf file..." | tee -a $LOG_FILE
+    if [ -f "/etc/rsyslog.d/vms_iptables.conf" ]; then
+        # Ask for user confirmation before overwriting
+        read -p "/etc/rsyslog.d/vms_iptables.conf already exists. Overwrite? (Y/n): " user_input
+        if ! [[ "$user_input" == "y" ||"$user_input" == "Y" ]]; then
+            echo "Updating rsyslog configuration file cancelled. Aborting installation." | tee -a $LOG_FILE
+            exit 1
+        fi
+    fi
+    echo "Updating rsyslog configuration..." | tee -a $LOG_FILE
     echo -e ':msg, startswith, "VMS#0" -/etc/vmsentry/logs/iptables_all_25.log\n:msg, startswith, "VMS#1" -/etc/vmsentry/logs/iptables_dropped_25.log' > /etc/rsyslog.d/vms_iptables.conf | tee -a $LOG_FILE || { echo 'Failed to edit VMS log location in rsyslog. Exiting.' | tee -a $LOG_FILE ; exit 1; }
     echo "Rsyslog configuration file updated to redirect iptables outgoing port 25 logs" | tee -a $LOG_FILE
     echo "Restarting Rsyslog..." | tee -a $LOG_FILE
