@@ -81,9 +81,9 @@ install_script() {
     echo "Downloading VMsentry" | tee -a $LOG_FILE
     wget https://github.com/lulubas/vmsentry/archive/refs/heads/main.zip -O /etc/vmsentry/vmsentry.zip >/dev/null 2>&1 || { echo "Failed to download VMsentry" | tee -a $LOG_FILE ; exit 1; }
 
-    # Unzip the downloaded file
+    # Unzip the downloaded file (junking the directory structure)
     echo "Unzipping VMsentry archive..." | tee -a $LOG_FILE
-    unzip /etc/vmsentry/vmsentry.zip -d /etc/vmsentry/ >/dev/null 2>&1 || { echo "Failed to unzip VMsentry archive" | tee -a $LOG_FILE ; exit 1; }
+    unzip -j /etc/vmsentry/vmsentry.zip -d /etc/vmsentry/ >/dev/null 2>&1 || { echo "Failed to unzip VMsentry archive" | tee -a $LOG_FILE ; exit 1; }
 
     # Remove the downloaded .zip file
     echo "Removing installation archive..." | tee -a $LOG_FILE
@@ -174,7 +174,7 @@ setup_iptables() {
     if [ -z "$MAIN_IFACE" ]; then
         echo "Main network interface not detected properly: $MAIN_IFACE". Exiting. | tee -a $LOG_FILE
         exit 1
-    fi 
+    fi
     
     echo "Main network interface detected: $MAIN_IFACE" | tee -a $LOG_FILE
     iptables -I FORWARD -o $MAIN_IFACE -p tcp --dport 25 -j LOG_ONLY || { echo 'Failed to add LOG_ONLY rule to FORWARD chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
@@ -228,4 +228,4 @@ install_mta
 setup_iptables
 setup_cron
 
-echo "Install finished. Please check $LOG_FILE for the log"
+echo "Install finished. Please check $LOG_FILE for the log" | tee -a $LOG_FILE
