@@ -147,9 +147,9 @@ setup_iptables() {
         echo "iptables is already installed. Continuing" | tee -a $LOG_FILE
     else
         echo "iptables is not yet installed. Starting to install now." | tee -a $LOG_FILE
-        if [[ "$OS" == "Ubuntu" || "$OS" == "Debian" ]]; then
+        if [[ "$OS" == "ubuntu" || "$OS" == "debian" ]]; then
             apt-get install iptables -y | tee -a $LOG_FILE || { echo 'Iptables installation failed. Exiting.' | tee -a $LOG_FILE ; exit 1; }
-        elif [[ "$OS" == "CentOS Linux" || "$OS" == "AlmaLinux" || "$OS" == "Red Hat Enterprise Linux" ]]; then
+        elif [[ "$OS" == "centos linux" || "$OS" == "almalinux" || "$OS" == "red hat enterprise linux" ]]; then
             yum install iptables -y | tee -a $LOG_FILE || { echo 'IPtables installation failed. Exiting.' | tee -a $LOG_FILE ; exit 1; }
         else
             echo "iptables installation not supported on this OS:$OS"
