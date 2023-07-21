@@ -206,8 +206,12 @@ setup_cron() {
     else
         # Cron job does not exist, add it
         echo "Adding cron job..." | tee -a $LOG_FILE
-        # Write out current crontab to a temp file
-        crontab -l > mycron || { echo "Failed to write current crontab to file. Exiting." | tee -a $LOG_FILE ; exit 1; }
+        # Write out current crontab to a temp file, if one exists
+        if crontab -l 2>/dev/null; then
+            crontab -l > mycron || { echo "Failed to write current crontab to file. Exiting." | tee -a $LOG_FILE ; exit 1; }
+        else
+            touch mycron
+        fi
         # Echo new cron into cron file, run script every 10 minutes
         echo "*/10 * * * * /usr/bin/python3 /etc/vmsentry/vm_sentry.py # $CRON_NAME" >> mycron
         # Install new cron file
