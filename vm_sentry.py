@@ -202,7 +202,7 @@ def is_ip_blocked(ip):
 # Block IP address port 25 access when the threshold is reached
 def block_ip(ip):
     try:
-        block_command = f'iptables -I FORWARD 2 -p tcp --dport 25 -s {ip} -j LOG_AND_DROP'
+        block_command = f'iptables -A OUTGOING_MAIL -s {ip} -j LOG_AND_DROP'
         subprocess.run(block_command, shell=True)
         logging.info(f"IP {ip} blocked.")
     except Exception as e:
@@ -211,8 +211,8 @@ def block_ip(ip):
 # Limit IP address port 25 access when the threshold is reached
 def limit_ip(ip, hash_limit_min, hash_limit_burst):
     try:
-        block_command_1 = f'iptables -I FORWARD 2 -s {ip} -p tcp --dport 25 -j LOG_AND_DROP'
-        block_command_2 = f'iptables -A FORWARD 2 -s {ip} -p tcp --dport 25 -m hashlimit --hashlimit {hash_limit_min}/min --hashlimit-burst {hash_limit_burst} --hashlimit-mode srcip --hashlimit-name smtp_limit -j ACCEPT'
+        block_command_1 = f'iptables -I OUTGOING_MAIL 2 -s {ip} -p tcp --dport 25 -j LOG_AND_DROP'
+        block_command_2 = f'iptables -A OUTGOING_MAIL 2 -s {ip} -p tcp --dport 25 -m hashlimit --hashlimit {hash_limit_min}/min --hashlimit-burst {hash_limit_burst} --hashlimit-mode srcip --hashlimit-name smtp_limit -j ACCEPT'
         subprocess.run(block_command_1, shell=True)
         subprocess.run(block_command_2, shell=True)
         logging.info(f"IP {ip} access to port 25 has been rate limited.")
@@ -222,8 +222,8 @@ def limit_ip(ip, hash_limit_min, hash_limit_burst):
 # Main function
 def main():
 
-    logging.info("Starting to run vmsentry...")
     setup_logging()
+    logging.info("Starting to run vmsentry...")
     timeframe, smtp_threshold, unique_ips_threshold, mode, hash_limit_min, hash_limit_burst, from_addr, to_addr, send_mail = load_config()
     logging.info("Config.ini file successfully loaded")
 

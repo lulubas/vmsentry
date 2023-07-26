@@ -19,7 +19,7 @@ initial_checks() {
     if [ -d "$SCRIPT_DIR" ]; then
         echo "One or more VMsentry directories already exist."
         read -p "Do you want to overwrite existing directories and pursue installation (Y/n) ?" user_input
-        if [[ "$user_input" == "y" ||"$user_input" == "Y" ]]; then
+        if [ "${user_input,,}" == "y" ]; then
             echo "Deleting existing vmsentry directories" | tee -a $LOG_FILE
             rm -rf /etc/vmsentry || { echo "Failed to delete $SCRIPT_DIR" | tee -a $LOG_FILE ; exit 1; }
         else
@@ -128,8 +128,8 @@ install_mta() {
         echo "Postfix is already installed. Continuing"
     else
         echo "No MTA detected. Do you want to install Postfix? (y/n)"
-        read answer
-        if [[ "$answer" == "y" || "$answer" == "Y" ]]; then
+        read user_input
+        if [ "${user_input,,}" == "y" ]; then
             if [[ "$OS" == "ubuntu" || "$OS" == "debian" ]]; then
                 apt-get install postfix -y | tee -a $LOG_FILE || { echo 'Postfix installation failed. Exiting.' | tee -a $LOG_FILE ; exit 1; }
             elif [[ "$OS" == "centOS linux" || "$OS" == "almalinux" || "$OS" == "red hat enterprise linux" ]]; then
@@ -146,13 +146,20 @@ install_mta() {
     fi
 }
 
+# Define a function to check if an interface is a NAT interface.
+# In this script, we're assuming that NAT interfaces have names that begin with "natbr".
+is_nat_interface() {
+    local interface=$1
+    [[ $interface == natbr* ]]
+}
+
 # Setup iptables and required chains
 setup_iptables() {
     # Install iptables
     if command -v iptables &>/dev/null; then
         echo "iptables is already installed. Continuing" | tee -a $LOG_FILE
     else
-        echo "iptables is not yet installed. Starting to install now." | tee -a $LOG_FILE
+        echo "iptables is not installed. Starting to install now." | tee -a $LOG_FILE
         if [[ "$OS" == "ubuntu" || "$OS" == "debian" ]]; then
             apt-get install iptables -y | tee -a $LOG_FILE || { echo 'Iptables installation failed. Exiting.' | tee -a $LOG_FILE ; exit 1; }
         elif [[ "$OS" == "centos linux" || "$OS" == "almalinux" || "$OS" == "red hat enterprise linux" ]]; then
@@ -164,44 +171,40 @@ setup_iptables() {
         echo "iptables installation successfull" | tee -a $LOG_FILE
     fi
 
-    # Setting up LOG_ONLY chain
-    echo "Setting up port 25 monitoring via a new LOG_ONLY chain" | tee -a $LOG_FILE
-    echo "Checking LOG_ONLY chain..." | tee -a $LOG_FILE
-    if iptables -L LOG_ONLY >/dev/null 2>&1; then
-        echo 'LOG_ONLY chain already exists.' | tee -a $LOG_FILE
-        read -p 'Flush the LOG_ONLY chain and recreate the rules? Say yes only if LOG_ONLY chain exists because of a previous installation. (y/n)' user_input
-            if [[ "$user_input" == "y" ||"$user_input" == "Y" ]]; then
-                echo "Flushing LOG_ONLY chain" | tee -a $LOG_FILE
-                iptables -F LOG_ONLY || { echo 'An error occured while flushing LOG_ONLY chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
-                echo "Flushing LOG_ONLY chain successfull" | tee -a $LOG_FILE
+    # Setting up OUTGOING_MAIL chain
+    echo "Setting up port 25 monitoring via a new OUTGOING_MAIL chain" | tee -a $LOG_FILE
+    echo "Checking OUTGOING_MAIL chain..." | tee -a $LOG_FILE
+    if iptables -L OUTGOING_MAIL >/dev/null 2>&1; then
+        echo 'OUTGOING_MAIL chain already exists.' | tee -a $LOG_FILE
+        read -p 'Flush the OUTGOING_MAIL chain and recreate the rules? (Y/n)' user_input
+            if [ "${user_input,,}" == "y" ]; then
+                echo "Flushing OUTGOING_MAIL chain" | tee -a $LOG_FILE
+                iptables -F OUTGOING_MAIL || { echo 'An error occured while flushing OUTGOING_MAIL chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
+                echo "Flushing OUTGOING_MAIL chain successfull" | tee -a $LOG_FILE
             else
-                echo "Updating LOG_ONLY chain cancelled. Aborting installation." | tee -a $LOG_FILE
+                echo "Updating OUTGOING_MAIL chain cancelled. Aborting installation." | tee -a $LOG_FILE
                 exit 1
             fi
     else
-        echo "LOG_ONLY chain does not yet exist. Adding it." | tee -a $LOG_FILE
-        iptables -N LOG_ONLY || { echo 'An error occured while creating LOG_ONLY chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
-        echo "LOG_ONLY created successfully" | tee -a $LOG_FILE
+        echo "OUTGOING_MAIL chain does not yet exist. Adding it." | tee -a $LOG_FILE
+        iptables -N OUTGOING_MAIL || { echo 'An error occured while creating OUTGOING_MAIL chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
+        echo "OUTGOING_MAIL created successfully" | tee -a $LOG_FILE
     fi
-    echo "Adding LOG_ONLY chain rules" | tee -a $LOG_FILE
-    iptables -A LOG_ONLY -j LOG --log-prefix "[VMS#0] Logged: " --log-level 4 || { echo 'An error occured while adding LOG rule to LOG_ONLY chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
-    iptables -A LOG_ONLY -j ACCEPT || { echo 'An error occured while adding ACCEPT rule to LOG_ONLY chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
-    echo "LOG_ONLY chain created and LOG and ACCEPT rules added" | tee -a $LOG_FILE
+    echo "Adding OUTGOING_MAIL rules" | tee -a $LOG_FILE
+    iptables -A OUTGOING_MAIL -j LOG --log-prefix "[VMS#0] Logged: " --log-level 4 || { echo 'An error occured while adding LOG rule to LOG_ONLY chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
+    echo "OUTGOING_MAIL chain created and LOG rule added" | tee -a $LOG_FILE
 
-    # Detecting main network interface, redirecting port 25 traffic to LOG_ONLY chain
-    if [ $(ip route show default | awk '/default/ {print $5}' | wc -l) == 1 ]; then
-        MAIN_IFACE="$(ip route show default | awk '/default/ {print $5}')"
-    else
-        MAIN_IFACE="$(ip route show default | awk '/default/ {print $5}' | sed -n 2p)"
-    fi
-    if [ -z "$MAIN_IFACE" ]; then
-        echo "Main network interface not detected properly: $MAIN_IFACE". Exiting. | tee -a $LOG_FILE
-        exit 1
-    else
-        echo "Main network interface detected: $MAIN_IFACE" | tee -a $LOG_FILE
-        iptables -I FORWARD -o $MAIN_IFACE -p tcp --dport 25 -j LOG_ONLY || { echo 'Failed to add LOG_ONLY rule to FORWARD chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
-        echo "Port 25 traffic redirected to LOG_ONLY chain" | tee -a $LOG_FILE
-    fi
+    # Detecting main NAT network interfaces, redirecting port 25 traffic to OUTGOING_MAIL chain
+    # Get the list of all network interfaces.
+    interfaces=$(ls /sys/class/net)
+    # Loop over all network interfaces.
+    for interface in $interfaces; do
+        # If this is a NAT interface, add the iptables rules.
+        if is_nat_interface $interface; then
+            echo "Detected NAT interface: $interface"
+            iptables -I LIBVIRT_FWO 1 -i $interface -p tcp --dport 25 -j OUTGOING_MAIL
+        fi
+    done
 
     # Setuping up the LOG_AND_DROP chain and rules
     echo "Checking LOG_AND_DROP chain..." | tee -a $LOG_FILE
