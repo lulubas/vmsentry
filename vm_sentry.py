@@ -17,7 +17,7 @@ def setup_logging():
 def load_config():
     logging.info('Loading Configuration file')
     config = configparser.ConfigParser()
-    config.read('config.ini')
+    config.read('/etc/vmsentry/config.ini')
 
     try:
         timeframe = int(config.get('settings', 'timeframe'))
