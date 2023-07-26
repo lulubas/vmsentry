@@ -147,7 +147,7 @@ def handle_ip(mode, connections, unique_ips, smtp_threshold, unique_ips_threshol
     action_taken = False
     if is_chain_exists('LOG_AND_DROP'):
         for ip in connections.keys():
-            logging.info(f"{ip} has {connections[ip]} over the timeframe targeting {len(unique_ips[ip])} unique IPs")
+            logging.info(f"{ip} has {connections[ip]} connexions for {len(unique_ips[ip])} unique IPs")
             if connections[ip] > smtp_threshold or len(unique_ips[ip]) > unique_ips_threshold and not is_ip_blocked(ip):
                 action_taken = True
                 if mode == 'monitor':
@@ -244,7 +244,7 @@ def main():
 
     logging.info("Taking actions against IP addresses over quotas...")
     handle_ip(mode, connections, unique_ips, smtp_threshold, unique_ips_threshold, hash_limit_min, hash_limit_burst, from_addr, to_addr, send_mail)
-    logging.info("All actions have now been taken. Program run successfull. Exiting")
+    logging.info("Program run successfull. Exiting")
 
 if __name__ == '__main__':
     main()
