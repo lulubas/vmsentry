@@ -106,16 +106,16 @@ def get_vm_ips(running_vms):
 # Parse iptables logs and extract SMTP connexions per IP and unique destination IPs  
 def parse_logs(timeframe_hours):
     try:
-        with open("logs/iptables_all.log") as f:
+        with open("logs/iptables_all_25.log") as f:
             lines = f.readlines()
         if not lines:
-            logging.error('iptables_all.log file is empty. Please wait until logs start being generated. Exiting')
+            logging.error('iptables_all_25.log file is empty. Please wait until logs start being generated. Exiting')
             sys.exit(1)
     except FileNotFoundError:
-        logging.error('iptables_all.log file does not exist. Exiting.')
+        logging.error('iptables_all_25.log file does not exist. Exiting.')
         sys.exit(1)
     except Exception as e:
-        logging.error(f'Unexpected error when reading iptables_all.log: {str(e)}. Exiting.')
+        logging.error(f'Unexpected error when reading iptables_all_25.log: {str(e)}. Exiting.')
         sys.exit(1)
 
     pattern = r"SRC=(?P<src>\S+) DST=(?P<dst>\S+) .* DPT=25"
