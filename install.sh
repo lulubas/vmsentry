@@ -202,7 +202,7 @@ setup_iptables() {
         # If this is a NAT interface, add the iptables rules.
         if is_nat_interface $interface; then
             echo "Detected NAT interface: $interface"
-            iptables -I LIBVIRT_FWO 1 -i $interface -p tcp --dport 25 -j OUTGOING_MAIL
+            iptables -I LIBVIRT_FWO -i $interface -p tcp --dport 25 -j OUTGOING_MAIL
         fi
     done
 
@@ -220,7 +220,7 @@ setup_iptables() {
                 exit 1
             fi
     else
-        echo "LOG_ONLY chain does not yet exist. Adding it." | tee -a $LOG_FILE
+        echo "LOG_AND_DROP chain does not yet exist. Adding it." | tee -a $LOG_FILE
         iptables -N LOG_AND_DROP || { echo 'An error occured while creating LOG_AND_DROP chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
         echo "LOG_AND_DROP created successfully" | tee -a $LOG_FILE
     fi
@@ -256,7 +256,7 @@ setup_iptables() {
         fi
     fi
     echo "Updating rsyslog configuration..." | tee -a $LOG_FILE
-    echo -e ':msg, startswith, "VMS#0" -/etc/vmsentry/logs/iptables_all_25.log\n:msg, startswith, "VMS#1" -/etc/vmsentry/logs/iptables_dropped_25.log' > /etc/rsyslog.d/vms_iptables.conf | tee -a $LOG_FILE || { echo 'Failed to edit VMS log location in rsyslog. Exiting.' | tee -a $LOG_FILE ; exit 1; }
+    echo -e ':msg, startswith, "VMS#0" /etc/vmsentry/logs/iptables_all_25.log\n:msg, startswith, "VMS#1" /etc/vmsentry/logs/iptables_dropped_25.log' > /etc/rsyslog.d/vms_iptables.conf | tee -a $LOG_FILE || { echo 'Failed to edit VMS log location in rsyslog. Exiting.' | tee -a $LOG_FILE ; exit 1; }
     echo "Rsyslog configuration file updated to redirect iptables outgoing port 25 logs" | tee -a $LOG_FILE
     echo "Restarting Rsyslog..." | tee -a $LOG_FILE
     systemctl restart rsyslog | tee -a $LOG_FILE || { echo 'Failed to restart rsyslog.' | tee -a $LOG_FILE ; exit 1; }
