@@ -144,17 +144,22 @@ def parse_logs(timeframe_hours):
 
 # Compare the gathered data with the pre-defined thresholds and take the predetermined action
 def handle_ip(mode, connections, unique_ips, smtp_threshold, unique_ips_threshold, hash_limit_min, hash_limit_burst, from_addr, to_addr, send_mail):
+    action_taken = False
     if is_chain_exists('LOG_AND_DROP'):
         for ip in connections.keys():
+            logging.info(f"{ip} has {connections[ip]} over the timeframe targeting {len(unique_ips[ip])} unique IPs")
             if connections[ip] > smtp_threshold or len(unique_ips[ip]) > unique_ips_threshold and not is_ip_blocked(ip):
+                action_taken = True
                 if mode == 'monitor':
-                    logging.info(f"[Monitor] Thresholds reached for {ip} -- Connections: {connections[ip]} -- Unique IPs: {len(unique_ips[ip])}")
+                    logging.info(f"[Monitor] Thresholds reached for {ip}")
                 elif mode == 'block':
                     block_ip(ip)
                 elif mode == 'limit':
                     limit_ip(ip, hash_limit_min, hash_limit_burst)
                 if send_mail:
                     send_notification(ip, mode, connections, unique_ips, from_addr, to_addr)
+    if not action_taken:
+        logging.info("No action were taken during this run")
 
 # Send a mail notification when the threshold is reached
 def send_notification(ip, mode, connections, unique_ips, from_addr, to_addr):
