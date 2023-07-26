@@ -11,7 +11,7 @@ from email.mime.text import MIMEText
 
 # Setting up the log file
 def setup_logging():
-    logging.basicConfig(filename='logs/vmsentry.log', level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+    logging.basicConfig(filename='/etc/vmsentry/logs/vmsentry.log', level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 
 # Loading configration file and variables
 def load_config():
