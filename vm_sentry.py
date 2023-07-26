@@ -106,7 +106,7 @@ def get_vm_ips(running_vms):
 # Parse iptables logs and extract SMTP connexions per IP and unique destination IPs  
 def parse_logs(timeframe_hours):
     try:
-        with open("logs/iptables_all_25.log") as f:
+        with open("/etc/vmsentry/logs/iptables_all_25.log") as f:
             lines = f.readlines()
         if not lines:
             logging.error('iptables_all_25.log file is empty. Please wait until logs start being generated. Exiting')
