@@ -128,7 +128,7 @@ def parse_logs(timeframe_hours):
             logging.error('iptables_all_25.log file is empty. Please wait until logs start being generated. Exiting')
             sys.exit(1)
     except FileNotFoundError:
-        logging.error('iptables_all_25.log file does not exist. Exiting.')
+        logging.error('iptables_all_25.log file does not exist (yet). You might need to wait until logs are generated. Exiting.')
         sys.exit(1)
     except Exception as e:
         logging.error(f'Unexpected error when reading iptables_all_25.log: {str(e)}. Exiting.')
@@ -248,7 +248,9 @@ def limit_ip(ip, hash_limit_min, hash_limit_burst):
 def main():
 
     setup_logging()
-    logging.info("===Starting to run VMsentry====")
+    logging.info("=================================")
+    logging.info("=====Starting to run VMsentry====")
+    logging.info("=================================")
     timeframe, smtp_threshold, unique_ips_threshold, mode, hash_limit_min, hash_limit_burst, from_addr, to_addr, send_mail = load_config()
     logging.info("Config.ini file successfully loaded")
 
@@ -264,8 +266,7 @@ def main():
 
     logging.info("Taking actions against IP addresses over quotas...")
     handle_ip(mode, connections, unique_ips, smtp_threshold, unique_ips_threshold, hash_limit_min, hash_limit_burst, from_addr, to_addr, send_mail)
-    logging.info("====Program run successfull. Exiting====")
-    logging.info("====-----====")
+    logging.info("Program run successfull. Exiting")
 
 if __name__ == '__main__':
     main()

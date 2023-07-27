@@ -204,10 +204,12 @@ setup_iptables() {
     # Detecting main NAT network interfaces, redirecting port 25 traffic to OUTGOING_MAIL chain
     # Get the list of all network interfaces.
     interfaces=$(ls /sys/class/net)
+    interface_found=0
     # Loop over all network interfaces.
     for interface in $interfaces; do
         # If this is a NAT interface, add the iptables rules.
         if is_nat_interface $interface; then
+            interface_found=1
             echo "Detected NAT interface: $interface" | tee -a $LOG_FILE
             if ! iptables -C LIBVIRT_FWO -i $interface -p tcp --dport 25 -j OUTGOING_MAIL >/dev/null 2>&1; then
                 echo "Rule does not exist for $interface. Adding it" | tee -a $LOG_FILE
@@ -217,6 +219,10 @@ setup_iptables() {
             fi
         fi
     done
+    if [[ $interface_found == 0 ]]; then
+            echo "No NAT interface found. Exiting" | tee -a $LOG_FILE
+            exit 1
+    fi
 
     # Setuping up the LOG_AND_DROP chain and rules
     echo "Checking LOG_AND_DROP chain..." | tee -a $LOG_FILE
