@@ -91,6 +91,8 @@ install_script() {
     echo "Unzipping VMsentry archive..." | tee -a $LOG_FILE
     unzip -j /etc/vmsentry/vmsentry.zip -d /etc/vmsentry/ >/dev/null 2>&1 || { echo "Failed to unzip VMsentry archive" | tee -a $LOG_FILE ; exit 1; }
     mkdir /etc/vmsentry/cron/ || { echo "Failed to create cron directory" | tee -a $LOG_FILE ; exit 1; }
+    ls /etc/vmsentry/run_vmsentry.sh
+    pwd
     mv /etc/vmsentry/run_vmsentry.sh /etc/vmsentry/cron/ || { echo "Failed to move cron wrapper into cron directory" | tee -a $LOG_FILE ; exit 1; }
 
     # Remove the downloaded .zip file
