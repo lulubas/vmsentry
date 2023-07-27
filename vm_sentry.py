@@ -4,6 +4,7 @@ import re
 import collections
 from datetime import datetime, timedelta
 import logging
+from logging.handlers import TimedRotatingFileHandler
 import sys
 import smtplib
 from email.mime.multipart import MIMEMultipart
@@ -11,7 +12,16 @@ from email.mime.text import MIMEText
 
 # Setting up the log file
 def setup_logging():
-    logging.basicConfig(filename='/etc/vmsentry/logs/vmsentry.log', level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+    log_filename = '/etc/vmsentry/logs/vmsentry.log'
+    when = 'midnight'  # Rotate logs at midnight
+
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+    handler = TimedRotatingFileHandler(log_filename, when=when, interval=7, backupCount=5)
+    formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+    handler.setFormatter(formatter)
+
+    logger = logging.getLogger()
+    logger.addHandler(handler)
 
 # Loading configration file and variables
 def load_config():
@@ -186,8 +196,9 @@ def is_chain_exists(chain):
     try:
         subprocess.check_output(f'iptables -L {chain} -n', shell=True)
         return True
-    except subprocess.CalledProcessError:
+    except subprocess.CalledProcessError as e:
         logging.error(f'{chain} chain does not exist. Exiting')
+        logging.error(f'Error message: {e.output.decode()}')
         raise
 
 # Check if the IP address is already blocked or limited in iptables
@@ -228,7 +239,7 @@ def limit_ip(ip, hash_limit_min, hash_limit_burst):
 def main():
 
     setup_logging()
-    logging.info("Starting to run vmsentry...")
+    logging.info("===Starting to run VMsentry====")
     timeframe, smtp_threshold, unique_ips_threshold, mode, hash_limit_min, hash_limit_burst, from_addr, to_addr, send_mail = load_config()
     logging.info("Config.ini file successfully loaded")
 
@@ -244,7 +255,8 @@ def main():
 
     logging.info("Taking actions against IP addresses over quotas...")
     handle_ip(mode, connections, unique_ips, smtp_threshold, unique_ips_threshold, hash_limit_min, hash_limit_burst, from_addr, to_addr, send_mail)
-    logging.info("Program run successfull. Exiting")
+    logging.info("====Program run successfull. Exiting====")
+    logging.info("====-----====")
 
 if __name__ == '__main__':
     main()
