@@ -91,9 +91,10 @@ install_script() {
     echo "Unzipping VMsentry archive..." | tee -a $LOG_FILE
     unzip -j /etc/vmsentry/vmsentry.zip -d /etc/vmsentry/ >/dev/null 2>&1 || { echo "Failed to unzip VMsentry archive" | tee -a $LOG_FILE ; exit 1; }
     mkdir /etc/vmsentry/cron/ || { echo "Failed to create cron directory" | tee -a $LOG_FILE ; exit 1; }
-    ls /etc/vmsentry/run_vmsentry.sh
-    pwd
     mv /etc/vmsentry/run_vmsentry.sh /etc/vmsentry/cron/ || { echo "Failed to move cron wrapper into cron directory" | tee -a $LOG_FILE ; exit 1; }
+    echo "Adding execution permission for cron wrapper script..." | tee -a $LOG_FILE
+    chmod +x /etc/vmsentry/cron/run_vmsentry.py || { echo "Failed to change cron wrapper permission. Exiting." | tee -a $LOG_FILE ; exit 1; }
+    echo "Permission set correctly" | tee -a $LOG_FILE
 
     # Remove the downloaded .zip file
     echo "Removing installation archive..." | tee -a $LOG_FILE
@@ -295,9 +296,6 @@ setup_cron() {
         crontab mycron || { echo "Failed to install new crontab. Exiting." | tee -a $LOG_FILE ; exit 1; }
         rm mycron
         echo "Cron job added successfully." | tee -a $LOG_FILE
-        echo "Adding execution privilege for cron wrapper script..." | tee -a $LOG_FILE
-        chmod +x /etc/vmsentry/cron/run_vmsentry.py || { echo "Failed to change cron wrapper privileges. Exiting." | tee -a $LOG_FILE ; exit 1; }
-        echo "Permission set correctly" | tee -a $LOG_FILE
     fi
 }
 
