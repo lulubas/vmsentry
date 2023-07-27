@@ -10,18 +10,24 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-# Setting up the log file
 def setup_logging():
     log_filename = '/etc/vmsentry/logs/vmsentry.log'
+    entries_log_filename = '/etc/vmsentry/logs/IP_entries.log'
     when = 'midnight'  # Rotate logs at midnight
 
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     handler = TimedRotatingFileHandler(log_filename, when=when, interval=7, backupCount=5)
+    entries_handler = logging.FileHandler(entries_log_filename)
+
     formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
     handler.setFormatter(formatter)
+    entries_handler.setFormatter(formatter)
 
     logger = logging.getLogger()
     logger.addHandler(handler)
+
+    action_logger = logging.getLogger('entries')
+    action_logger.addHandler(entries_handler)
 
 # Loading configration file and variables
 def load_config():
@@ -162,10 +168,13 @@ def handle_ip(mode, connections, unique_ips, smtp_threshold, unique_ips_threshol
                 action_taken = True
                 if mode == 'monitor':
                     logging.info(f"[Monitor] Thresholds reached for {ip}")
+                    logging.getLogger('entries').info(f"{ip} has reached the limits but remains unblocked ({connections[ip]} connexions/{len(unique_ips[ip])} unique IPs)")
                 elif mode == 'block':
                     block_ip(ip)
+                    logging.getLogger('entries').info(f"{ip} is blocked ({connections[ip]} connexions/{len(unique_ips[ip])} unique IPs)")
                 elif mode == 'limit':
                     limit_ip(ip, hash_limit_min, hash_limit_burst)
+                    logging.getLogger('entries').info(f"{ip} is limited to {hash_limit_min}/min connexions ({connections[ip]} connexions/{len(unique_ips[ip])} unique IPs)")
                 if send_mail:
                     send_notification(ip, mode, connections, unique_ips, from_addr, to_addr)
     if not action_taken:
