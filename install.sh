@@ -95,7 +95,7 @@ install_script() {
     echo "Moving cron wrapper into cron directory..." | tee -a $LOG_FILE
     mv /etc/vmsentry/run_vmsentry.sh /etc/vmsentry/cron/ || { echo "Failed to move cron wrapper into cron directory" | tee -a $LOG_FILE ; exit 1; }
     echo "Adding execution permission for cron wrapper script..." | tee -a $LOG_FILE
-    chmod +x /etc/vmsentry/cron/run_vmsentry.py || { echo "Failed to change cron wrapper permission. Exiting." | tee -a $LOG_FILE ; exit 1; }
+    chmod +x /etc/vmsentry/cron/run_vmsentry.sh || { echo "Failed to change cron wrapper permission. Exiting." | tee -a $LOG_FILE ; exit 1; }
     echo "Permission set correctly" | tee -a $LOG_FILE
 
     # Remove the downloaded .zip file
