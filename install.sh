@@ -201,8 +201,13 @@ setup_iptables() {
     for interface in $interfaces; do
         # If this is a NAT interface, add the iptables rules.
         if is_nat_interface $interface; then
-            echo "Detected NAT interface: $interface"
-            iptables -I LIBVIRT_FWO -i $interface -p tcp --dport 25 -j OUTGOING_MAIL
+            echo "Detected NAT interface: $interface" | tee -a $LOG_FILE
+            if ! iptables -C LIBVIRT_FWO -i $interface -p tcp --dport 25 -j OUTGOING_MAIL >/dev/null 2>&1; then
+                echo "Rule does not exist for $interface. Adding it" | tee -a $LOG_FILE
+                iptables -I LIBVIRT_FWO -i $interface -p tcp --dport 25 -j OUTGOING_MAIL
+            else
+                echo "Rule for $interface already exists" | tee -a $LOG_FILE
+            fi
         fi
     done
 
