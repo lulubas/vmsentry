@@ -299,7 +299,7 @@ setup_cron() {
             touch mycron
         fi
         # Echo new cron into cron file, run script every 10 minutes
-        echo "*/10 * * * * /usr/bin/python3 /etc/vmsentry/cron/run_vmsentry.sh # $CRON_NAME" >> mycron
+        echo "*/10 * * * *  /etc/vmsentry/cron/run_vmsentry.sh > /etc/vmsentry/cron/cron.log 2>&1 # $CRON_NAME" >> mycron
         # Install new cron file
         crontab mycron || { echo "Failed to install new crontab. Exiting." | tee -a $LOG_FILE ; exit 1; }
         rm mycron
