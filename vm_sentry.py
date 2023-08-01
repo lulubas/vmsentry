@@ -16,7 +16,7 @@ def setup_logging():
     when = 'midnight'  # Rotate logs at midnight
 
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
-    handler = TimedRotatingFileHandler(log_filename, when=when, interval=7, backupCount=5)
+    handler = TimedRotatingFileHandler(log_filename, when=when, interval=7, backupCount=2)
     entries_handler = logging.FileHandler(entries_log_filename)
 
     formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
