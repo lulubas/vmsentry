@@ -107,7 +107,7 @@ install_script() {
     rm /etc/vmsentry/vmsentry.zip || { echo "Failed to remove VMsentry archive" | tee -a $LOG_FILE ; exit 1; }
     echo "VMsentry installation archive successfully removed" | tee -a $LOG_FILE
     echo "Removing unnecessary git files..." | tee -a $LOG_FILE
-    rm /etc/vmsentry/gitignore  || { echo "Failed to remove gtignore file" | tee -a $LOG_FILE ; exit 1; }
+    rm /etc/vmsentry/.gitignore  || { echo "Failed to remove gtignore file" | tee -a $LOG_FILE ; exit 1; }
     rm /etc/vmsentry/README.md || { echo "Failed to remove README file" | tee -a $LOG_FILE ; exit 1; }
     echo "VMsentry downloaded and unzipped successfully" | tee -a $LOG_FILE
 }
