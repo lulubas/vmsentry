@@ -300,7 +300,7 @@ setup_iptables() {
     else
         echo "Creating custom rsyslog configuration to redirect logs VMSentry logs directory..." | tee -a $LOG_FILE
         echo -e ':msg, contains, "VMS#0" /etc/vmsentry/logs/iptables_all_25.log\n& stop\n:msg, contains, "VMS#1" /etc/vmsentry/logs/iptables_dropped_25.log\n& stop' > /etc/rsyslog.d/vms_iptables.conf || { echo 'Failed to edit VMS log location in rsyslog. Exiting.' | tee -a $LOG_FILE ; exit 1; }   
-        echo "Rsyslog configuration file create" | tee -a $LOG_FILE
+        echo "Rsyslog configuration file created /etc/rsyslog.d/vms_iptables.conf " | tee -a $LOG_FILE
         echo "Restarting Rsyslog..." | tee -a $LOG_FILE
         systemctl restart rsyslog | tee -a $LOG_FILE || { echo 'Failed to restart rsyslog.' | tee -a $LOG_FILE ; exit 1; }
         echo "Rsyslog restarted successfully" | tee -a $LOG_FILE
