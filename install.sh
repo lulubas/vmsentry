@@ -113,7 +113,7 @@ install_script() {
 # Check and Install Python function
 install_python() {
     if command -v python3 &>/dev/null; then
-        echo "Python 3 is already installed"
+        echo "Python 3 is already installed."
     else
         echo "Python 3 is not yet installed. Starting installation now..."
         if [[ "$OS" == "ubuntu" || "$OS" == "debian" ]]; then
@@ -132,13 +132,13 @@ install_python() {
 # Check and Install Postfix if no MTA is currently installed
 install_mta() {
     if command -v sendmail &>/dev/null; then
-        echo "sendmail is already installed. Continuing"
+        echo "sendmail is already installed."
     elif command -v exim &>/dev/null; then
-        echo "Exim is already installed. Continuing"
+        echo "Exim is already installed."
     elif command -v postfix &>/dev/null; then
-        echo "Postfix is already installed. Continuing"
+        echo "Postfix is already installed."
     else
-        echo "No MTA detected. Do you want to install Postfix? (y/n)"
+        echo "No MTA detected. Do you want to install Postfix? (Y/n)"
         read user_input
         if [ "${user_input,,}" == "y" ]; then
             if [[ "$OS" == "ubuntu" || "$OS" == "debian" ]]; then
@@ -168,7 +168,7 @@ is_nat_interface() {
 setup_iptables() {
     # Check for iptables
     if command -v iptables &>/dev/null; then
-        echo "iptables is already installed. Continuing" | tee -a $LOG_FILE
+        echo "iptables is already installed." | tee -a $LOG_FILE
     else
         echo "iptables is not installed. Make sure you run VMSentry on an iptables-enabled KVM host. Exiting." | tee -a $LOG_FILE
         exit 1
@@ -289,7 +289,6 @@ setup_iptables() {
         # Ask for user confirmation before overwriting
         read -p "/etc/rsyslog.d/vms_iptables.conf already exists. Overwrite? (Y/n): " user_input
         if [ "${user_input,,}" == "y" ]; then
-            echo "Updating rsyslog configuration..." | tee -a $LOG_FILE
             echo -e ':msg, contains, "VMS#0" /etc/vmsentry/logs/iptables_all_25.log\n& stop\n:msg, contains, "VMS#1" /etc/vmsentry/logs/iptables_dropped_25.log\n& stop' > /etc/rsyslog.d/vms_iptables.conf || { echo 'Failed to edit VMS log location in rsyslog. Exiting.' | tee -a $LOG_FILE ; exit 1; }   
             echo "Rsyslog configuration file updated to redirect iptables outgoing port 25 logs" | tee -a $LOG_FILE
             echo "Restarting Rsyslog..." | tee -a $LOG_FILE
@@ -298,6 +297,13 @@ setup_iptables() {
         else
             echo "Rsyslog configuration file was not updated. Pursuing." | tee -a $LOG_FILE
         fi
+    else
+        echo "Creating custom rsyslog configuration to redirect logs VMSentry logs directory..." | tee -a $LOG_FILE
+        echo -e ':msg, contains, "VMS#0" /etc/vmsentry/logs/iptables_all_25.log\n& stop\n:msg, contains, "VMS#1" /etc/vmsentry/logs/iptables_dropped_25.log\n& stop' > /etc/rsyslog.d/vms_iptables.conf || { echo 'Failed to edit VMS log location in rsyslog. Exiting.' | tee -a $LOG_FILE ; exit 1; }   
+        echo "Rsyslog configuration file create" | tee -a $LOG_FILE
+        echo "Restarting Rsyslog..." | tee -a $LOG_FILE
+        systemctl restart rsyslog | tee -a $LOG_FILE || { echo 'Failed to restart rsyslog.' | tee -a $LOG_FILE ; exit 1; }
+        echo "Rsyslog restarted successfully" | tee -a $LOG_FILE
     fi
 }
 
