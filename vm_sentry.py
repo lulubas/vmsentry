@@ -213,13 +213,14 @@ def is_chain_exists(chain):
 # Check if the IP address is already blocked or limited in iptables
 def is_ip_blocked(ip):
     try:
-        iptables_rules_output = subprocess.check_output('iptables -L -n', shell=True)
-        iptables_rules = iptables_rules_output.decode()
-        if f' {ip} ' in iptables_rules:
-            logging.info(f"IP {ip} is already blocked or limited.")
-            return True
-        else:
-            return False
+        cmd = 'iptables -L OUTGOING_MAIL -n'
+        iptables_rules_output = subprocess.check_output(cmd, shell=True)
+        iptables_rules = iptables_rules_output.decode().split('\n')
+        for line in iptables_rules:
+            if line.strip().split(' ')[3] == ip:
+                logging.info(f"IP {ip} is already blocked or limited.")
+                return True
+        return False
     except Exception as e:
         logging.error(f"Error checking if IP {ip} is blocked: {str(e)}. Exiting")
         raise
