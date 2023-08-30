@@ -164,7 +164,7 @@ def handle_ip(mode, connections, unique_ips, smtp_threshold, unique_ips_threshol
     if is_chain_exists('LOG_AND_DROP'):
         for ip in connections.keys():
             logging.info(f"{ip} has {connections[ip]} connexions for {len(unique_ips[ip])} unique IPs")
-            if connections[ip] > smtp_threshold or len(unique_ips[ip]) > unique_ips_threshold and not is_ip_blocked(ip):
+            if (connections[ip] > smtp_threshold or len(unique_ips[ip]) > unique_ips_threshold) and not is_ip_blocked(ip):
                 action_taken = True
                 if mode == 'monitor':
                     logging.info(f"[Monitor] Thresholds reached for {ip}")
@@ -251,6 +251,33 @@ def limit_ip(ip, hash_limit_min, hash_limit_burst):
     except Exception as e:
         logging.error(f"Error limiting IP {ip}: {str(e)}")
 
+def flush_iptables(chain):
+    try:
+        # Count the total number of LOG_AND_DROP entries
+        result = subprocess.run(['iptables', '-n', '-L', chain, '--line-numbers'], capture_output=True, text=True)
+        total_entries = result.stdout.count("LOG_AND_DROP")
+
+        # Since we want to keep the first entry, we start removing from the second entry
+        for _ in range(total_entries):
+            subprocess.run(['iptables', '-D', 'OUTGOING_MAIL', '2'])
+
+        print("Successfully flushed iptables entries.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+def handle_commands(argv):
+    if len(argv) > 1:
+        command = argv[1]
+        if command in ["flush", "--flush"]:
+            chain_name = 'OUTGOING_MAIL'  # Replace with the chain name you want to use
+            flush_iptables(chain_name)
+            return True
+        # Add more commands here as elif conditions
+        # elif command in ["another_command", "--another_command"]:
+        #     another_function()
+        #     return True
+    return False
+
 # Main function
 def main():
 
@@ -260,6 +287,9 @@ def main():
     logging.info("=================================")
     timeframe, smtp_threshold, unique_ips_threshold, mode, hash_limit_min, hash_limit_burst, from_addr, to_addr, send_mail = load_config()
     logging.info("Config.ini file successfully loaded")
+
+    if handle_commands(sys.argv):
+        return
 
     logging.info("Fetching VM names and IP addresses")
     vms = get_vms()
