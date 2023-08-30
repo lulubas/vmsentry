@@ -211,18 +211,24 @@ def is_chain_exists(chain):
         raise
 
 # Check if the IP address is already blocked or limited in iptables
-def is_ip_blocked(ip):
+def is_ip_blocked(ip, chain='OUTGOING_MAIL'):
     try:
-        cmd = 'iptables -L OUTGOING_MAIL -n'
-        iptables_rules_output = subprocess.check_output(cmd, shell=True)
-        iptables_rules = iptables_rules_output.decode().split('\n')
-        for line in iptables_rules:
-            if line.strip().split(' ')[3] == ip:
-                logging.info(f"IP {ip} is already blocked or limited.")
-                return True
+        # Fetch iptables rules specifically for the relevant chain.
+        iptables_rules_output = subprocess.check_output(f'iptables -n -L {chain}', shell=True)
+        iptables_rules = iptables_rules_output.decode()
+
+        # Split by lines and iterate over them to check if the IP is in any line.
+        for line in iptables_rules.split('\n'):
+            fields = line.split()
+            if len(fields) > 3:  # Ensuring that source IP exists in the line
+                if fields[3] == ip:  # Checking if source IP matches the IP we are looking for
+                    print(f"IP {ip} is already blocked or limited.")
+                    return True
+
         return False
+
     except Exception as e:
-        logging.error(f"Error checking if IP {ip} is blocked: {str(e)}. Exiting")
+        print(f"Error checking if IP {ip} is blocked: {str(e)}. Exiting.")
         raise
 
 # Block IP address port 25 access when the threshold is reached
