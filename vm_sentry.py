@@ -309,14 +309,18 @@ def handle_commands(argv):
     if len(argv) > 1:
         command = argv[1]
         if command in ["flush-chain", "--flush-chain"]:
+            logging.info(f"Flushing the chain{chain_name}")
             flush_chain(chain_name)
-            return True
+            sys.exit(1)
         elif command in ["flush-logs", "--flush-logs"]:
+            logging.info("Flushing log files")
             flush_logs(log_files, log_dir)
-            return True
+            sys.exit(1)
         elif command in ["flush-all", "--flush-all"]:
+            logging.info("Flushing log files and iptables chains")
             flush_chain(chain_name)
             flush_logs(log_files, log_dir)
+            sys.exit(1)
     return False
 
 # Main function
@@ -324,13 +328,12 @@ def main():
     try: 
         setup_logging()
         logging.info("=================================")
-        logging.info("=====Starting to run VMsentry====")
+        logging.info("==== Starting to run VMsentry ===")
         logging.info("=================================")
         timeframe, smtp_threshold, unique_ips_threshold, mode, hash_limit_min, hash_limit_burst, from_addr, to_addr, send_mail = load_config()
         logging.info("Config.ini file successfully loaded")
 
-        if handle_commands(sys.argv):
-            return
+        handle_commands(sys.argv):
         
         logging.info("Performing intial checks")
         init_checks()
