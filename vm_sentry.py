@@ -254,13 +254,13 @@ def limit_ip(ip, hash_limit_min, hash_limit_burst):
 def flush_iptables(chain):
     try:
         # Count the total number of LOG_AND_DROP entries
-        result = subprocess.run(['iptables', '-n', '-L', chain, '--line-numbers'], capture_output=True, text=True)
+        result = subprocess.run(['iptables', '-n', '-L', chain], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
         total_entries = result.stdout.count("LOG_AND_DROP")
 
         # Since we want to keep the first entry, we start removing from the second entry
         for _ in range(total_entries):
             subprocess.run(['iptables', '-D', 'OUTGOING_MAIL', '2'])
-
+            
         logging.info("Successfully flushed iptables entries.")
     except Exception as e:
         logging.error(f"An error occurred: {e}")
