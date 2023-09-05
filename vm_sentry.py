@@ -265,10 +265,11 @@ def flush_chain(chain):
     except Exception as e:
         logging.error(f"An error occurred: {e}")
 
-def flush_logs(log_files):
+def flush_logs(log_files, log_dir):
     for log_file in log_files:
+        full_path = f"{log_dir}{log_file}"
         try:
-            with open(log_file, 'w'):
+            with open(full_path, 'w'):
                 pass
             logging.info(f"Successfully emptied {log_file}.")
         except Exception as e:
@@ -276,6 +277,7 @@ def flush_logs(log_files):
 
 def handle_commands(argv):
     chain_name = 'OUTGOING_MAIL'  # Replace with the chain name you want to use
+    log_dir = '/etc/vmsentry/logs/'
     log_files = [
                 'IP_entries.log',
                 'iptables_all_25.log',
@@ -288,7 +290,7 @@ def handle_commands(argv):
             flush_chain(chain_name)
             return True
         elif command in ["flush-logs", "--flush-logs"]:
-            flush_logs(log_files)
+            flush_logs(log_files, log_dir)
             return True
         elif command in ["flush-all", "--flush-all"]:
             flush_chain(chain_name)
