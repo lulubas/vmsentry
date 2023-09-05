@@ -222,13 +222,13 @@ def is_ip_blocked(ip, chain='OUTGOING_MAIL'):
             fields = line.split()
             if len(fields) > 3:  # Ensuring that source IP exists in the line
                 if fields[3] == ip:  # Checking if source IP matches the IP we are looking for
-                    print(f"IP {ip} is already blocked or limited.")
+                    logging.info(f"IP {ip} is already blocked or limited.")
                     return True
 
         return False
 
     except Exception as e:
-        print(f"Error checking if IP {ip} is blocked: {str(e)}. Exiting.")
+        logging.error(f"Error checking if IP {ip} is blocked: {str(e)}. Exiting.")
         raise
 
 # Block IP address port 25 access when the threshold is reached
@@ -236,7 +236,7 @@ def block_ip(ip):
     try:
         block_command = f'iptables -A OUTGOING_MAIL -s {ip} -j LOG_AND_DROP'
         subprocess.run(block_command, shell=True)
-        logging.info(f"IP {ip} blocked.")
+        logging.info(f"Blocking IP {ip}.")
     except Exception as e:
         logging.error(f"Error blocking IP {ip}: {str(e)}")
 
@@ -261,9 +261,9 @@ def flush_iptables(chain):
         for _ in range(total_entries):
             subprocess.run(['iptables', '-D', 'OUTGOING_MAIL', '2'])
 
-        print("Successfully flushed iptables entries.")
+        logging.info("Successfully flushed iptables entries.")
     except Exception as e:
-        print(f"An error occurred: {e}")
+        logging.error(f"An error occurred: {e}")
 
 def handle_commands(argv):
     if len(argv) > 1:
