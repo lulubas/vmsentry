@@ -251,7 +251,7 @@ def limit_ip(ip, hash_limit_min, hash_limit_burst):
     except Exception as e:
         logging.error(f"Error limiting IP {ip}: {str(e)}")
 
-def flush_iptables(chain):
+def flush_chain(chain):
     try:
         # Count the total number of LOG_AND_DROP entries
         result = subprocess.run(['iptables', '-n', '-L', chain], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
@@ -260,22 +260,39 @@ def flush_iptables(chain):
         # Since we want to keep the first entry, we start removing from the second entry
         for _ in range(total_entries):
             subprocess.run(['iptables', '-D', 'OUTGOING_MAIL', '2'])
-            
+
         logging.info("Successfully flushed iptables entries.")
     except Exception as e:
         logging.error(f"An error occurred: {e}")
 
+def flush_logs(log_files):
+    for log_file in log_files:
+        try:
+            with open(log_file, 'w'):
+                pass
+            logging.info(f"Successfully emptied {log_file}.")
+        except Exception as e:
+            logging.error(f"An error occurred while emptying {log_file}: {e}")
+
 def handle_commands(argv):
+    chain_name = 'OUTGOING_MAIL'  # Replace with the chain name you want to use
+    log_files = [
+                'IP_entries.log',
+                'iptables_all_25.log',
+                'iptables_dropped_25.log',
+                'vmsentry.log'
+    ]
     if len(argv) > 1:
         command = argv[1]
-        if command in ["flush", "--flush"]:
-            chain_name = 'OUTGOING_MAIL'  # Replace with the chain name you want to use
-            flush_iptables(chain_name)
+        if command in ["flush-chain", "--flush-chain"]:
+            flush_chain(chain_name)
             return True
-        # Add more commands here as elif conditions
-        # elif command in ["another_command", "--another_command"]:
-        #     another_function()
-        #     return True
+        elif command in ["flush-logs", "--flush-logs"]:
+            flush_logs(log_files)
+            return True
+        elif command in ["flush-all", "--flush-all"]:
+            flush_chain(chain_name)
+            flush_logs(log_files)
     return False
 
 # Main function
