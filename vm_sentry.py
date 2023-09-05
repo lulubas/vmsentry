@@ -70,8 +70,18 @@ def load_config():
 
 def init_checks():
     required_chains = ['OUTGOING_MAIL', 'LOG_AND_DROP']
-    if all(is_chain_exists(chain) for chain in required_chains):
+    if not all(is_chain_exists(chain) for chain in required_chains):
         raise RuntimeError("One or more required chains do not exist.")
+    
+# Check if the iptables chain exists
+def is_chain_exists(chain):
+    try:
+        subprocess.check_output(f'iptables -L {chain} -n', shell=True)
+        return True
+    except subprocess.CalledProcessError as e:
+        logging.error(f'{chain} chain does not exist. Exiting')
+        logging.error(f'Error message: {e.output.decode()}')
+        raise
 
 # Fetch the list of all guest VMs
 def get_vms():
@@ -221,16 +231,6 @@ def send_notification(ip, mode, connections, unique_ips, from_addr, to_addr):
 
     except Exception as e:
         logging.error(f"Error sending notification: {str(e)}")
-
-# Check if the iptables chain exists
-def is_chain_exists(chain):
-    try:
-        subprocess.check_output(f'iptables -L {chain} -n', shell=True)
-        return True
-    except subprocess.CalledProcessError as e:
-        logging.error(f'{chain} chain does not exist. Exiting')
-        logging.error(f'Error message: {e.output.decode()}')
-        raise
 
 # Check if the IP address is already blocked or limited in iptables
 def is_ip_blocked(ip, chain='OUTGOING_MAIL'):
