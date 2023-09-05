@@ -68,6 +68,11 @@ def load_config():
 
     return timeframe, smtp_threshold, unique_ips_threshold, mode, hash_limit_min, hash_limit_burst, from_addr, to_addr, send_mail
 
+def init_checks():
+    required_chains = ['OUTGOING_MAIL', 'LOG_AND_DROP']
+    if all(is_chain_exists(chain) for chain in required_chains):
+        raise RuntimeError("One or more required chains do not exist.")
+
 # Fetch the list of all guest VMs
 def get_vms():
 
@@ -119,7 +124,7 @@ def get_vm_ips(running_vms):
 
     return vm_ips
 
-# Parse iptables logs and extract SMTP connexions per IP and unique destination IPs  
+# Parse iptables logs and extract SMTP connections per IP and unique destination IPs  
 def parse_logs(timeframe_hours):
     try:
         with open("/etc/vmsentry/logs/iptables_all_25.log") as f:
@@ -161,24 +166,41 @@ def parse_logs(timeframe_hours):
 # Compare the gathered data with the pre-defined thresholds and take the predetermined action
 def handle_ip(mode, connections, unique_ips, smtp_threshold, unique_ips_threshold, hash_limit_min, hash_limit_burst, from_addr, to_addr, send_mail):
     action_taken = False
-    if is_chain_exists('LOG_AND_DROP'):
-        for ip in connections.keys():
-            logging.info(f"{ip} has {connections[ip]} connexions for {len(unique_ips[ip])} unique IPs")
-            if (connections[ip] > smtp_threshold or len(unique_ips[ip]) > unique_ips_threshold) and not is_ip_blocked(ip):
-                action_taken = True
-                if mode == 'monitor':
-                    logging.info(f"[Monitor] Thresholds reached for {ip}")
-                    logging.getLogger('entries').info(f"{ip} has reached the limits but remains unblocked ({connections[ip]} connexions/{len(unique_ips[ip])} unique IPs)")
-                elif mode == 'block':
-                    block_ip(ip)
-                    logging.getLogger('entries').info(f"{ip} is blocked ({connections[ip]} connexions/{len(unique_ips[ip])} unique IPs)")
-                elif mode == 'limit':
-                    limit_ip(ip, hash_limit_min, hash_limit_burst)
-                    logging.getLogger('entries').info(f"{ip} is limited to {hash_limit_min}/min connexions ({connections[ip]} connexions/{len(unique_ips[ip])} unique IPs)")
-                if send_mail:
-                    send_notification(ip, mode, connections, unique_ips, from_addr, to_addr)
+
+    # Fetch all VMs
+    all_vms = get_vms()
+    
+    # Fetch running VMs
+    running_vms = get_running_vms(all_vms)
+    
+    # Fetch IP addresses for running VMs
+    running_vm_ips = get_vm_ips(running_vms)
+
+    for vm in all_vms:
+        if vm in running_vms:
+            ip = running_vm_ips.get(vm, "N/A")
+            if ip in connections:
+                logging.info(f"{vm} ({ip}) | {connections[ip]} connections to {len(unique_ips[ip])} unique IPs")
+                if (connections[ip] > smtp_threshold or len(unique_ips[ip]) > unique_ips_threshold) and not is_ip_blocked(ip):
+                    action_taken = True
+                    if mode == 'monitor':
+                        logging.info(f"[Monitor] Thresholds reached for {ip}")
+                        logging.getLogger('entries').info(f"{ip} has reached the limits but remains unblocked ({connections[ip]} connections/{len(unique_ips[ip])} unique IPs)")
+                    elif mode == 'block':
+                        block_ip(ip)
+                        logging.getLogger('entries').info(f"{ip} is blocked ({connections[ip]} connections/{len(unique_ips[ip])} unique IPs)")
+                    elif mode == 'limit':
+                        limit_ip(ip, hash_limit_min, hash_limit_burst)
+                        logging.getLogger('entries').info(f"{ip} is limited to {hash_limit_min}/min connections ({connections[ip]} connections/{len(unique_ips[ip])} unique IPs)")
+                    if send_mail:
+                        send_notification(ip, mode, connections, unique_ips, from_addr, to_addr)
+            else:
+                logging.info(f"{vm} ({ip}) | No connection logged")
+        else:
+            logging.info(f"{vm} : Not running")
+            
     if not action_taken:
-        logging.info("No action were taken during this run")
+        logging.info("No actions were taken during this run")
 
 # Send a mail notification when the threshold is reached
 def send_notification(ip, mode, connections, unique_ips, from_addr, to_addr):
@@ -294,35 +316,42 @@ def handle_commands(argv):
             return True
         elif command in ["flush-all", "--flush-all"]:
             flush_chain(chain_name)
-            flush_logs(log_files)
+            flush_logs(log_files, log_dir)
     return False
 
 # Main function
 def main():
+    try: 
+        setup_logging()
+        logging.info("=================================")
+        logging.info("=====Starting to run VMsentry====")
+        logging.info("=================================")
+        timeframe, smtp_threshold, unique_ips_threshold, mode, hash_limit_min, hash_limit_burst, from_addr, to_addr, send_mail = load_config()
+        logging.info("Config.ini file successfully loaded")
 
-    setup_logging()
-    logging.info("=================================")
-    logging.info("=====Starting to run VMsentry====")
-    logging.info("=================================")
-    timeframe, smtp_threshold, unique_ips_threshold, mode, hash_limit_min, hash_limit_burst, from_addr, to_addr, send_mail = load_config()
-    logging.info("Config.ini file successfully loaded")
+        if handle_commands(sys.argv):
+            return
+        
+        logging.info("Performing intial checks")
+        init_checks()
 
-    if handle_commands(sys.argv):
-        return
+        logging.info("Fetching VM names and IP addresses")
+        vms = get_vms()
+        running_vms = get_running_vms(vms)
+        vm_ips = get_vm_ips(running_vms)
+        logging.info(f'Fetching successfull. Total VPS: {len(vms)}, {len(running_vms)} running')
 
-    logging.info("Fetching VM names and IP addresses")
-    vms = get_vms()
-    running_vms = get_running_vms(vms)
-    vm_ips = get_vm_ips(running_vms)
-    logging.info(f'Fetching successfull. Total VPS: {len(vms)}, {len(running_vms)} running')
+        logging.info(f"Parsing logs file more recent than {timeframe} hours")
+        connections, unique_ips = parse_logs(timeframe)
+        logging.info("Logs parsed successfully")
 
-    logging.info(f"Parsing logs file more recent than {timeframe} hours")
-    connections, unique_ips = parse_logs(timeframe)
-    logging.info("Logs parsed successfully")
+        logging.info("Taking actions against IP addresses over quotas...")
+        handle_ip(mode, connections, unique_ips, smtp_threshold, unique_ips_threshold, hash_limit_min, hash_limit_burst, from_addr, to_addr, send_mail)
+        logging.info("Program run successfull. Exiting")
 
-    logging.info("Taking actions against IP addresses over quotas...")
-    handle_ip(mode, connections, unique_ips, smtp_threshold, unique_ips_threshold, hash_limit_min, hash_limit_burst, from_addr, to_addr, send_mail)
-    logging.info("Program run successfull. Exiting")
+    except RuntimeError as e:
+        logging.error(f"Initial checks failed: {e}")
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()
