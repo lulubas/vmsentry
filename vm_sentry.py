@@ -318,16 +318,15 @@ def expire_ip(block_timelimit):
     for line in lines:
         try:
             timestamp = parse_time(line)
-            _, log_message = line.split("kernel:", 1)
 
             if timestamp > timeframe:
-                match = re.search(pattern, log_message)
+                match = re.search(pattern, line)
                 if match:
                     ip = match.group("ip")
                     unblock_ip(ip)
                     remove_line_from_file(log_file_path, line)  # remove the line from the file
         except Exception as e:
-            logging.error(f'Unexpected error while parsing the ip entry log "{line}": {str(e)}. Skipping.')
+            logging.error(f' entry log "{line}": {str(e)}. Skipping.')
             continue
     return True
 
