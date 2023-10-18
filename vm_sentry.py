@@ -175,7 +175,8 @@ def parse_logs(timeframe_hours):
 
 def parse_time (string):
     try:
-        timestamp_str = " ".join(string.split(' ', 3)[:3])
+        timestamp_elements = string.split()[:3]  # Get first three elements
+        timestamp_str = " ".join(timestamp_elements)
         timestamp = datetime.strptime(timestamp_str + ' ' + str(datetime.now().year), "%b %d %H:%M:%S %Y")
         return timestamp
     except Exception as e:
