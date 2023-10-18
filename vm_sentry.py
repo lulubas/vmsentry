@@ -67,7 +67,7 @@ def load_config():
         logging.error(f"Unexpected error: {str(e)}. Exiting")
         sys.exit(1)
 
-    return timeframe, smtp_threshold, unique_ips_threshold, mode, hash_limit_min, hash_limit_burst, from_addr, to_addr, send_mail
+    return timeframe, block_timelimit, smtp_threshold, unique_ips_threshold, mode, hash_limit_min, hash_limit_burst, from_addr, to_addr, send_mail
 
 def init_checks():
     required_chains = ['OUTGOING_MAIL', 'LOG_AND_DROP']
@@ -157,9 +157,8 @@ def parse_logs(timeframe_hours):
 
     for line in lines:
         try:
-            timestamp_str, log_message = line.split("kernel:", 1)
-            timestamp_str = timestamp_str.strip().rsplit(" ", 1)[0]
-            timestamp = datetime.strptime(timestamp_str + ' ' + str(datetime.now().year), "%b %d %H:%M:%S %Y")
+            timestamp = parse_time(line)
+            _, log_message = line.split("kernel:", 1)
 
             if timestamp > timeframe:
                 match = re.search(pattern, log_message)
@@ -173,6 +172,15 @@ def parse_logs(timeframe_hours):
             continue
 
     return connections, unique_ips
+
+def parse_time (string):
+    try:
+        timestamp_str = " ".join(string.split(' ', 3)[:3])
+        timestamp = datetime.strptime(timestamp_str + ' ' + str(datetime.now().year), "%b %d %H:%M:%S %Y")
+        return timestamp
+    except Exception as e:
+        logging.error(f"Could not extract timestamp: {e}")
+        return None
 
 # Compare the gathered data with the pre-defined thresholds and take the predetermined action
 def handle_ip(mode, connections, unique_ips, smtp_threshold, unique_ips_threshold, hash_limit_min, hash_limit_burst, from_addr, to_addr, send_mail):
@@ -236,19 +244,33 @@ def send_notification(ip, mode, connections, unique_ips, from_addr, to_addr):
 # Check if the IP address is already blocked or limited in iptables
 def is_ip_blocked(ip, chain='OUTGOING_MAIL'):
     try:
-        # Fetch iptables rules specifically for the relevant chain.
-        iptables_rules_output = subprocess.check_output(f'iptables -n -L {chain}', shell=True)
+        # Fetch iptables rules specifically for the relevant chain, with the rule number
+        iptables_rules_output = subprocess.check_output(f'iptables -n -L {chain} --line-numbers', shell=True)
         iptables_rules = iptables_rules_output.decode()
+
+        # Flag to indicate if we should start looking for IPs
+        start_looking = False
 
         # Split by lines and iterate over them to check if the IP is in any line.
         for line in iptables_rules.split('\n'):
             fields = line.split()
-            if len(fields) > 3:  # Ensuring that source IP exists in the line
-                if fields[3] == ip:  # Checking if source IP matches the IP we are looking for
-                    logging.info(f"IP {ip} is already blocked or limited.")
-                    return True
 
-        return False
+             # If the line starts with 'num', it means the next lines will contain the IPs
+            if fields and fields[0] == 'num':
+                start_looking = True
+                continue  # skip the current line
+
+            if start_looking:
+                if len(fields) > 4:  # Ensuring that source IP exists in the line
+                    rule_number = fields[0]
+                    rule_ip = fields[4]
+
+                    if rule_ip == ip:  # Checking if source IP matches the IP we are looking for
+                        logging.info(f"IP {ip} is currently blocked or limited.")
+                        return int(rule_number)
+
+        logging.info(f"IP {ip} is currently not blocked nor limited.")
+        return 0
 
     except Exception as e:
         logging.error(f"Error checking if IP {ip} is blocked: {str(e)}. Exiting.")
@@ -274,6 +296,64 @@ def limit_ip(ip, hash_limit_min, hash_limit_burst):
     except Exception as e:
         logging.error(f"Error limiting IP {ip}: {str(e)}")
 
+def expire_ip(block_timelimit):
+    log_file_path = "/etc/vmsentry/logs/IP_entries.log"
+    try:
+        with open(log_file_path) as f:
+            lines = f.readlines()
+        if not lines:
+            logging.error('No IP address seem blocked at the moment')
+            return
+    except FileNotFoundError:
+        logging.error('IP_entries.log not found. You might need to wait until the first IP gets blocked for the file to generate')
+        return
+    except Exception as e:
+        logging.error(f'Unexpected error when reading IP_entries.log: {str(e)}. Continuing.')
+        return
+
+    pattern = r"INFO (?P<ip>\S+) is"
+    timeframe = datetime.now() - timedelta(hours=block_timelimit)
+
+    for line in lines:
+        try:
+            timestamp = parse_time(line)
+            _, log_message = line.split("kernel:", 1)
+
+            if timestamp > timeframe:
+                match = re.search(pattern, log_message)
+                if match:
+                    ip = match.group("ip")
+                    unblock_ip(ip)
+                    remove_line_from_file(log_file_path, line)  # remove the line from the file
+        except Exception as e:
+            logging.error(f'Unexpected error while parsing the ip entry log "{line}": {str(e)}. Skipping.')
+            continue
+    return True
+
+def remove_line_from_file(filename, line_to_remove):
+    with open(filename, "r+") as f:
+        lines = f.readlines()
+        f.seek(0)  # move file pointer to the beginning of the file
+        f.truncate(0)  # truncate the file to empty it
+
+        for line in lines:
+            if line.strip("\n") != line_to_remove.strip("\n"):
+                f.write(line)
+
+def unblock_ip(ip):
+    rule_number = is_ip_blocked(ip)
+    try:
+        block_command = f'iptables -D OUTGOING_MAIL {rule_number}'
+        result = subprocess.run(block_command, shell=True, check=True)  # Check exit status
+        if result.returncode == 0:  # Successfully unblocked
+            logging.info(f"Unblocked IP {ip}.")
+        else:
+            logging.error(f"Unblocking failed for IP {ip}. Command returned {result.returncode}.")
+    except subprocess.CalledProcessError:
+        logging.error(f"Error unblocking IP {ip}. Command failed.")
+    except Exception as e:
+        logging.error(f"Unexpected error unblocking IP {ip}: {str(e)}")
+
 def flush_chain(chain):
     try:
         # Count the total number of LOG_AND_DROP entries
@@ -297,9 +377,6 @@ def flush_logs(log_files, log_dir):
             logging.info(f"Successfully emptied {log_file}.")
         except Exception as e:
             logging.error(f"An error occurred while emptying {log_file}: {e}")
-
-def prune_IP(ipblocked_log):
-
 
 def handle_commands(argv):
     chain_name = 'OUTGOING_MAIL'  # Replace with the chain name you want to use
@@ -334,10 +411,10 @@ def main():
         logging.info("=================================")
         logging.info("==== Starting to run VMsentry ===")
         logging.info("=================================")
-        timeframe, smtp_threshold, unique_ips_threshold, mode, hash_limit_min, hash_limit_burst, from_addr, to_addr, send_mail = load_config()
+        timeframe, block_timelimit, smtp_threshold, unique_ips_threshold, mode, hash_limit_min, hash_limit_burst, from_addr, to_addr, send_mail = load_config()
         logging.info("Config.ini file successfully loaded")
 
-        handle_commands(sys.argv):
+        handle_commands(sys.argv)
         
         logging.info("Performing intial checks")
         init_checks()
@@ -354,6 +431,9 @@ def main():
 
         logging.info("Taking actions against IP addresses over quotas...")
         handle_ip(mode, connections, unique_ips, smtp_threshold, unique_ips_threshold, hash_limit_min, hash_limit_burst, from_addr, to_addr, send_mail)
+        
+        logging.info("Removing IPs from iptables if they expired")
+        expire_ip(block_timelimit)        
         logging.info("Program run successfull. Exiting")
 
     except RuntimeError as e:
