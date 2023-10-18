@@ -19,7 +19,7 @@ def setup_logging():
     handler = TimedRotatingFileHandler(log_filename, when=when, interval=7, backupCount=2)
     entries_handler = logging.FileHandler(entries_log_filename)
 
-    formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+    formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s', datefmt="%b %d %H:%M:%S")
     handler.setFormatter(formatter)
     entries_handler.setFormatter(formatter)
 
@@ -37,6 +37,7 @@ def load_config():
 
     try:
         timeframe = int(config.get('settings', 'timeframe'))
+        block_timelimit = int(config.get('settings', 'block_timelimit'))
         smtp_threshold = int(config.get('settings', 'smtp_threshold'))
         unique_ips_threshold = int(config.get('settings', 'unique_ips_threshold'))
         mode = config.get('settings', 'mode')
@@ -296,6 +297,9 @@ def flush_logs(log_files, log_dir):
             logging.info(f"Successfully emptied {log_file}.")
         except Exception as e:
             logging.error(f"An error occurred while emptying {log_file}: {e}")
+
+def prune_IP(ipblocked_log):
+
 
 def handle_commands(argv):
     chain_name = 'OUTGOING_MAIL'  # Replace with the chain name you want to use
