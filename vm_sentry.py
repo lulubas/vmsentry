@@ -303,7 +303,7 @@ def expire_ip(block_timelimit):
         with open(log_file_path) as f:
             lines = f.readlines()
         if not lines:
-            logging.error('No IP address seem blocked at the moment')
+            logging.info('No IP address seem blocked at the moment')
             return
     except FileNotFoundError:
         logging.error('IP_entries.log not found. You might need to wait until the first IP gets blocked for the file to generate')
@@ -319,11 +319,9 @@ def expire_ip(block_timelimit):
         try:
             timestamp = parse_time(line)
 
-            if timestamp > timeframe:
-                print(f"timestamp for {ip}")
+            if timestamp < timeframe:
                 match = re.search(pattern, line)
                 if match:
-                    print(f"match for {ip}")
                     ip = match.group("ip")
                     unblock_ip(ip)
                     remove_line_from_file(log_file_path, line)  # remove the line from the file
@@ -343,7 +341,6 @@ def remove_line_from_file(filename, line_to_remove):
                 f.write(line)
 
 def unblock_ip(ip):
-    print(f"unblock for {ip}")
     rule_number = is_ip_blocked(ip)
     try:
         block_command = f'iptables -D OUTGOING_MAIL {rule_number}'
