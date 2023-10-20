@@ -48,6 +48,7 @@ def setup_logging():
         action_logger.setLevel(logging.INFO)
         action_logger.addHandler(entries_handler)
 
+        logging.info("===== VM SENTRY v0.42 =====")
         logging.info("VMSentry logger setup successfully") 
 
         # Rotating logs using a 30 days limit by default
@@ -471,7 +472,6 @@ def handle_commands(argv):
 def main():
     try: 
         setup_logging()
-        logging.info("==== Starting to run VMsentry ===")
         config = load_config()
         logging.info("Config.ini file successfully loaded")
 
@@ -497,8 +497,8 @@ def main():
         # expire_ip(block_timelimit)        
         # logging.info("Program run successfull. Exiting")
 
-    except RuntimeError as e:
-        logging.error(f"Initial checks failed: {e}")
+    except Exception as e:
+        logging.error(f"Error: {e}")
         sys.exit(1)
 
 if __name__ == '__main__':
