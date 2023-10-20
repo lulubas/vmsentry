@@ -1,73 +1,136 @@
 import subprocess
 import configparser
+from dataclasses import dataclass
 import re
 import collections
 from datetime import datetime, timedelta
 import logging
-from logging.handlers import TimedRotatingFileHandler
 import sys
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
+@dataclass
+class Config:
+    timeframe: int
+    block_timelimit: int
+    smtp_threshold: int
+    unique_ips_threshold: int
+    mode: str
+    hash_limit_min: int
+    hash_limit_burst: int
+    from_addr: str
+    to_addr: str
+    send_mail: bool
+
+#Setting up the logger
 def setup_logging():
-    log_filename = '/etc/vmsentry/logs/vmsentry.log'
-    entries_log_filename = '/etc/vmsentry/logs/IP_entries.log'
-    when = 'midnight'  # Rotate logs at midnight
 
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
-    handler = TimedRotatingFileHandler(log_filename, when=when, interval=7, backupCount=2)
-    entries_handler = logging.FileHandler(entries_log_filename)
-
-    formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s', datefmt="%b %d %H:%M:%S")
-    handler.setFormatter(formatter)
-    entries_handler.setFormatter(formatter)
-
-    logger = logging.getLogger()
-    logger.addHandler(handler)
-
-    action_logger = logging.getLogger('entries')
-    action_logger.addHandler(entries_handler)
-
-# Loading configration file and variables
-def load_config():
-    logging.info('Loading Configuration file')
-    config = configparser.ConfigParser()
-    config.read('/etc/vmsentry/config.ini')
-
+    #Set the limit (days) for how long to keep logs
+    log_limit = 30
+    
     try:
-        timeframe = int(config.get('settings', 'timeframe'))
-        block_timelimit = int(config.get('settings', 'block_timelimit'))
-        smtp_threshold = int(config.get('settings', 'smtp_threshold'))
-        unique_ips_threshold = int(config.get('settings', 'unique_ips_threshold'))
-        mode = config.get('settings', 'mode')
-        hash_limit_min = int(config.get('settings', 'hash_limit_min'))
-        hash_limit_burst = int(config.get('settings', 'hash_limit_burst'))
-        from_addr = config.get('email', 'from_addr')
-        to_addr = config.get('email', 'to_addr')
-        send_mail = config.getboolean('email', 'send_email')
+        log_filename = '/etc/vmsentry/logs/vmsentry.log'
+        entries_log_filename = '/etc/vmsentry/logs/IP_entries.log'
+        formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s', datefmt="%b %d %H:%M:%S")
+
+        # Setting up main logger
+        handler = logging.FileHandler(log_filename)
+        handler.setFormatter(formatter)
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+        logger.addHandler(handler)
+
+        # Setting up logger for IP entries
+        entries_handler = logging.FileHandler(entries_log_filename)
+        entries_handler.setFormatter(formatter)
+        action_logger = logging.getLogger('entries')
+        action_logger.setLevel(logging.INFO)
+        action_logger.addHandler(entries_handler)
+
+        logging.info("VMSentry logger setup successfully") 
+
+        # Rotating logs using a 30 days limit by default
+        rotate_logs(log_filename, log_limit)
+                    
+        logging.info(f"Logs older than {log_limit} days were deleted")
+    
+    except Exception as e:
+        raise RuntimeError(f"An error occurred while setting up the logger: {e}")
+        
+def rotate_logs(file_path, limit):
+    try:
+        #Open the log file to rotate and parse it
+        with open(file_path, 'r') as f:
+            logs = f.readlines()
+        
+        #Iterate over each log line and only keep the ones that do not need to rotate
+        logs = [log for log in logs if not is_log_rotate(log, limit)]
+
+        #Write the logs to the file (overriding)
+        with open(file_path, 'w') as f:
+            f.writelines(logs)
+
+    except Exception as e:
+        raise RuntimeError(f"An error occurred while rotating logs: {e}")
+
+def is_log_rotate(log_line, limit, log_time_format="%b %d %H:%M:%S"):
+    try:
+        #Strip out the date/hour from the log line
+        timestamp_logstr = " ".join(log_line.split()[:3])
+
+        #Add the year and construct a timestamp object for the log
+        current_year = datetime.now().year
+        timestamp = datetime.strptime(f"{current_year} {timestamp_logstr}", f"%Y {log_time_format}")
+
+        #Return True/False if the log is younger/older than the limit set (days)
+        return datetime.now() - timestamp >= timedelta(days=limit)
+    
+    except Exception as e:
+        logging.error(f"An error occurred while checking if log ({log_line}) has expired: {e}")
+        return False
+
+# Loading configration file and variables and return a Config class object
+def load_config() -> Config:
+    try:
+        #Create the config object using the configparser library
+        config = configparser.ConfigParser()
+        config.read('/etc/vmsentry/config.ini')
+
+        # Use Config class to store the config.ini values
+        conf = Config(
+            timeframe=int(config.get('settings', 'timeframe')),
+            block_timelimit=int(config.get('settings', 'block_timelimit')),
+            smtp_threshold=int(config.get('settings', 'smtp_threshold')),
+            unique_ips_threshold=int(config.get('settings', 'unique_ips_threshold')),
+            mode=config.get('settings', 'mode'),
+            hash_limit_min=int(config.get('settings', 'hash_limit_min')),
+            hash_limit_burst=int(config.get('settings', 'hash_limit_burst')),
+            from_addr=config.get('email', 'from_addr'),
+            to_addr=config.get('email', 'to_addr'),
+            send_mail=config.getboolean('email', 'send_email')
+        )
 
         # Check if values are positive for certain parameters
-        if not all(value > 0 for value in [timeframe, smtp_threshold, unique_ips_threshold, hash_limit_min, hash_limit_burst]):
+        if not all(value > 0 for value in [conf.timeframe, conf.block_timelimit, conf.smtp_threshold, conf.unique_ips_threshold, conf.hash_limit_min, conf.hash_limit_burst]):
             raise ValueError("One or more config values are not positive integers.")
 
         # Check if mode is valid
-        if mode not in ['monitor', 'block', 'limit']:
+        if conf.mode not in ['monitor', 'block', 'limit']:
             raise ValueError("Invalid mode in configuration file.")
 
         # Check if email addresses are not empty
-        if not all(addr for addr in [from_addr, to_addr]):
+        if not all(addr for addr in [conf.from_addr, conf.to_addr]):
             raise ValueError("One or more email addresses are missing.")
+        
+        logging.info('Configuration file successfully loaded.')
 
     except (configparser.NoOptionError, configparser.NoSectionError, ValueError) as e:
-        logging.error(f"Error in configuration file: {str(e)}. Exiting")
-        sys.exit(1)
-    
+        raise RuntimeError(f"Error in configuration file: {str(e)}")
     except Exception as e:
-        logging.error(f"Unexpected error: {str(e)}. Exiting")
-        sys.exit(1)
+        raise RuntimeError(f"Unexpected error: {str(e)}")
 
-    return timeframe, block_timelimit, smtp_threshold, unique_ips_threshold, mode, hash_limit_min, hash_limit_burst, from_addr, to_addr, send_mail
+    return conf
 
 def init_checks():
     required_chains = ['OUTGOING_MAIL', 'LOG_AND_DROP']
@@ -408,10 +471,8 @@ def handle_commands(argv):
 def main():
     try: 
         setup_logging()
-        logging.info("=================================")
         logging.info("==== Starting to run VMsentry ===")
-        logging.info("=================================")
-        timeframe, block_timelimit, smtp_threshold, unique_ips_threshold, mode, hash_limit_min, hash_limit_burst, from_addr, to_addr, send_mail = load_config()
+        config = load_config()
         logging.info("Config.ini file successfully loaded")
 
         handle_commands(sys.argv)
