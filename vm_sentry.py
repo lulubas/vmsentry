@@ -475,27 +475,27 @@ def main():
         config = load_config()
         logging.info("Config.ini file successfully loaded")
 
-        handle_commands(sys.argv)
+        # handle_commands(sys.argv)
         
-        logging.info("Performing intial checks")
-        init_checks()
+        # logging.info("Performing intial checks")
+        # init_checks()
 
-        logging.info("Fetching VM names and IP addresses")
-        vms = get_vms()
-        running_vms = get_running_vms(vms)
-        vm_ips = get_vm_ips(running_vms)
-        logging.info(f'Fetching successfull. Total VPS: {len(vms)}, {len(running_vms)} running')
+        # logging.info("Fetching VM names and IP addresses")
+        # vms = get_vms()
+        # running_vms = get_running_vms(vms)
+        # vm_ips = get_vm_ips(running_vms)
+        # logging.info(f'Fetching successfull. Total VPS: {len(vms)}, {len(running_vms)} running')
 
-        logging.info(f"Parsing logs file more recent than {timeframe} hours")
-        connections, unique_ips = parse_logs(timeframe)
-        logging.info("Logs parsed successfully")
+        # logging.info(f"Parsing logs file more recent than {timeframe} hours")
+        # connections, unique_ips = parse_logs(timeframe)
+        # logging.info("Logs parsed successfully")
 
-        logging.info("Taking actions against IP addresses over quotas...")
-        handle_ip(mode, connections, unique_ips, smtp_threshold, unique_ips_threshold, hash_limit_min, hash_limit_burst, from_addr, to_addr, send_mail)
+        # logging.info("Taking actions against IP addresses over quotas...")
+        # handle_ip(mode, connections, unique_ips, smtp_threshold, unique_ips_threshold, hash_limit_min, hash_limit_burst, from_addr, to_addr, send_mail)
         
-        logging.info("Removing IPs from iptables if they expired")
-        expire_ip(block_timelimit)        
-        logging.info("Program run successfull. Exiting")
+        # logging.info("Removing IPs from iptables if they expired")
+        # expire_ip(block_timelimit)        
+        # logging.info("Program run successfull. Exiting")
 
     except RuntimeError as e:
         logging.error(f"Initial checks failed: {e}")
