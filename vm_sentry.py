@@ -301,7 +301,7 @@ def update_vmsentry():
         url = f"https://raw.githubusercontent.com/lulubas/vmsentry/main/{file_name}"
         try:
             # Fetch file from GitHub
-            response = requests.get(url)
+            response = requests.get(url, headers={'Cache-Control': 'no-cache'})
             response.raise_for_status()  # Raise HTTPError for bad responses
             remote_content = response.content
 
