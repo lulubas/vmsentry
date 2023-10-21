@@ -307,18 +307,22 @@ def update_vmsentry():
 
             # Calculate remote file hash
             remote_hash = calculate_hash(remote_content)
+            print(f"Remote hash of {file_name}: {remote_hash}")
+            
 
             # Calculate local file hash
             with open(file_name, 'rb') as f:
                 local_content = f.read()
             local_hash = calculate_hash(local_content)
+            print(f"Local hash of {file_name}: {local_hash}")
 
             # Compare hashes
             if local_hash == remote_hash:
                 print(f"{file_name} is up-to-date.")
                 continue
-
+            
             # If hashes don't match, update the file
+            print("Attempting to update the file...")
             with open(file_name, 'wb') as f:
                 f.write(remote_content)
             logging.info(f"Successfully updated {file_name}")
