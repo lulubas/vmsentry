@@ -1,6 +1,9 @@
+__version__ = '1.0.0'
+
 import subprocess
 import configparser
 from dataclasses import dataclass
+import argparse
 import re
 import collections
 from datetime import datetime, timedelta
@@ -31,7 +34,7 @@ def setup_logging():
     
     try:
         log_filename = '/etc/vmsentry/logs/vmsentry.log'
-        entries_log_filename = '/etc/vmsentry/logs/IP_entries.log'
+        entries_log_filename = '/etc/vmsentry/logs/IP.list'
         formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s', datefmt="%b %d %H:%M:%S")
 
         # Setting up main logger
@@ -48,7 +51,7 @@ def setup_logging():
         action_logger.setLevel(logging.INFO)
         action_logger.addHandler(entries_handler)
 
-        logging.info("===== VM SENTRY v0.42 =====")
+        logging.info(f"===== VM SENTRY ({__version__}) =====")
         logging.info("VMSentry logger setup successfully") 
 
         # Rotating logs using a 30 days limit by default
@@ -61,16 +64,14 @@ def setup_logging():
         
 def rotate_logs(file_path, limit):
     try:
-        #Open the log file to rotate and parse it
-        with open(file_path, 'r') as f:
-            logs = f.readlines()
+        #Read the log file
+        logs = read_from_file(file_path)
         
         #Iterate over each log line and only keep the ones that do not need to rotate
         logs = [log for log in logs if not is_log_rotate(log, limit)]
 
-        #Write the logs to the file (overriding)
-        with open(file_path, 'w') as f:
-            f.writelines(logs)
+        #Write the logs to the file
+        write_to_file(file_path)
 
     except Exception as e:
         raise RuntimeError(f"An error occurred while rotating logs: {e}")
@@ -132,6 +133,146 @@ def load_config() -> Config:
         raise RuntimeError(f"Unexpected error: {str(e)}")
 
     return conf
+
+#Handler function for arguments passed via CL
+def handle_commands():
+    #Set the different variables needed for the CL commands
+    log_dir = '/etc/vmsentry/logs/'
+    log_files = [
+        'iptables_all_25.log',
+        'iptables_dropped_25.log',
+        'vmsentry.log'
+    ]
+
+    #Use the argparse library to to handle each argument and its function
+    try:
+        parser = argparse.ArgumentParser(description='VM Sentry monitors port 25 and block IP with unusual traffic')
+        
+        #--flush-logs should empty all .log files (except install.log) 
+        parser.add_argument('--flush-logs', action='store_true', help='Flush log files')
+        #--flush-ip should flush all ip when standalone or a specific ip when placed behind
+        parser.add_argument('--flush-ip', type=str, nargs='?', const=True, help='Flush chain or specific IP')
+        #--flush-all should flush all logs and ip
+        parser.add_argument('--flush-all', action='store_true', help='Flush log files and IP chain')
+        #--update should update the script and required files to the latest version (git)
+        parser.add_argument('--version', action='store_true', help='Print the current version of VMSentry')
+        #--update should update the script and required files to the latest version (git)
+        # parser.add_argument('--update', action='store_true', help='Update to the newest version')
+
+        args = parser.parse_args()
+
+        if args.flush_logs:
+            flush_logs(log_files, log_dir)
+
+        if args.flush_ip:
+            #If it doesn't come without any additional argument
+            if args.flush_ip is True:
+                flush_chain()
+            #If it does come with an additional argument
+            else:
+                specific_ip = args.flush_ip
+                unblock_ip(specific_ip)
+
+        if args.flush_all:
+            flush_chain()
+            flush_logs(log_files, log_dir)
+
+        if args.version:
+            print(f"VM Sentry v{__version__}")
+
+        # if args.update:
+        #   update_vmsentry()
+
+    except Exception as e:
+        raise RuntimeError(f"Error while handling command: {str(e)}")
+
+#Go through each log file and empty it
+def flush_logs(log_files, log_dir):
+    for log_file in log_files:
+        full_path = f"{log_dir}{log_file}"
+        try:
+            with open(full_path, 'w'):
+                pass
+            logging.info(f"{full_path} emptied.")
+        except Exception as e:
+            raise RuntimeError(f"An error occurred while emptying {log_file}: {e}")
+    logging.info("Logs flushed successfully")
+
+#Unblocks all the IPs currently blocked
+def flush_chain(chain = 'OUTGOING_MAIL'):
+    #Get the list of the currently blocked IPs
+    list_ip = list_blocked_ips(chain)
+
+    try: 
+        #iterate over each key (IP address) and unblock it
+        for ip in list_ip.keys():
+            unblock_ip(ip, list_ip, chain)
+        logging.info(f"{chain} flushed successfully.")
+
+    except Exception as e:
+        raise RuntimeError(f"An error occurred flushing the iptables chain: {e}")
+
+#Helper function that is going to fetch and return a list of the blocked/limited IP addresses
+def list_blocked_ips(chain='OUTGOING_MAIL'):
+    blocked_ips = {}
+    try:
+        # Fetch the iptables rules afor the relevant chain (and rule number)
+        iptables_rules_output = subprocess.check_output(f'iptables -n -L {chain} --line-numbers', shell=True)
+        iptables_rules = iptables_rules_output.decode()
+
+        # Flag we will use to indicate that we reached the rules
+        start_looking = False
+
+        # Split by lines and iterate over them to check if the IP is in any line.
+        for line in iptables_rules.split('\n'):
+            fields = line.split()
+            # If the line starts with 'num', it means the next lines will contain the IPs
+            if fields and fields[0] == 'num':
+                start_looking = True
+                continue 
+
+            #Check that we reached the rules and that the line contains the IP field then add the key/value to the dictionnary
+            if start_looking:
+                if len(fields) > 4:
+                    rule_number = fields[0]
+                    rule_ip = fields[4]
+                    blocked_ips[rule_ip] = int(rule_number)
+
+    except Exception as e:
+        raise RuntimeError(f"Error fetching blocked IPs: {str(e)}. Exiting.")
+
+    return blocked_ips
+
+#Function to unblock a specific IP address
+def unblock_ip(ip, list_ip = None, chain = 'OUTGOING_MAIL'):
+
+    #Load the blocked IP list if it isn't provided by the caller function
+    if list_ip is None:
+        list_ip = list_blocked_ips(chain)
+
+    #Exctract the rule number for the IP to unblock
+    rule_number = list_ip.get(ip, None)
+
+    #Make sure that the rule exists for the corresponding ip
+    if rule_number is None:
+        logging.error(f"No rule found for IP {ip}.")
+        return False
+    
+    try:
+        #Remove the iptables rule for the desired IP address and check the exit status
+        block_command = f'iptables -D {chain} {rule_number}'
+        result = subprocess.run(block_command, shell=True, check=True)
+        if result.returncode == 0:
+            logging.info(f"Unblocked IP {ip}.")
+        else:
+            logging.error(f"Unblocking failed for IP {ip}. Command returned {result.returncode}.")
+
+    except subprocess.CalledProcessError:
+        logging.error(f"Error unblocking IP {ip}. Command failed.")
+        return False
+    except Exception as e:
+        logging.error(f"Unexpected error unblocking IP {ip}: {str(e)}")
+        return False
 
 def init_checks():
     required_chains = ['OUTGOING_MAIL', 'LOG_AND_DROP']
@@ -362,7 +503,7 @@ def limit_ip(ip, hash_limit_min, hash_limit_burst):
         logging.error(f"Error limiting IP {ip}: {str(e)}")
 
 def expire_ip(block_timelimit):
-    log_file_path = "/etc/vmsentry/logs/IP_entries.log"
+    log_file_path = "/etc/vmsentry/logs/IP.list"
     try:
         with open(log_file_path) as f:
             lines = f.readlines()
@@ -404,56 +545,18 @@ def remove_line_from_file(filename, line_to_remove):
             if line.strip("\n") != line_to_remove.strip("\n"):
                 f.write(line)
 
-def unblock_ip(ip):
-    rule_number = is_ip_blocked(ip)
-    try:
-        block_command = f'iptables -D OUTGOING_MAIL {rule_number}'
-        result = subprocess.run(block_command, shell=True, check=True)  # Check exit status
-        if result.returncode == 0:  # Successfully unblocked
-            logging.info(f"Unblocked IP {ip}.")
-        else:
-            logging.error(f"Unblocking failed for IP {ip}. Command returned {result.returncode}.")
-    except subprocess.CalledProcessError:
-        logging.error(f"Error unblocking IP {ip}. Command failed.")
-    except Exception as e:
-        logging.error(f"Unexpected error unblocking IP {ip}: {str(e)}")
-
-def flush_chain(chain):
-    try:
-        # Count the total number of LOG_AND_DROP entries
-        result = subprocess.run(['iptables', '-n', '-L', chain], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
-        total_entries = result.stdout.count("LOG_AND_DROP")
-
-        # Since we want to keep the first entry, we start removing from the second entry
-        for _ in range(total_entries):
-            subprocess.run(['iptables', '-D', 'OUTGOING_MAIL', '2'])
-
-        logging.info("Successfully flushed iptables entries.")
-    except Exception as e:
-        logging.error(f"An error occurred: {e}")
-
-def flush_logs(log_files, log_dir):
-    for log_file in log_files:
-        full_path = f"{log_dir}{log_file}"
-        try:
-            with open(full_path, 'w'):
-                pass
-            logging.info(f"Successfully emptied {log_file}.")
-        except Exception as e:
-            logging.error(f"An error occurred while emptying {log_file}: {e}")
-
 def handle_commands(argv):
     chain_name = 'OUTGOING_MAIL'  # Replace with the chain name you want to use
     log_dir = '/etc/vmsentry/logs/'
     log_files = [
-                'IP_entries.log',
-                'iptables_all_25.log',
-                'iptables_dropped_25.log',
-                'vmsentry.log'
+        'install.log'
+        'iptables_all_25.log',
+        'iptables_dropped_25.log',
+        'vmsentry.log'
     ]
     if len(argv) > 1:
         command = argv[1]
-        if command in ["flush-chain", "--flush-chain"]:
+        if command in ["flush-ip", "--flush-ip"]:
             logging.info(f"Flushing the chain{chain_name}")
             flush_chain(chain_name)
             sys.exit(1)
@@ -468,14 +571,31 @@ def handle_commands(argv):
             sys.exit(1)
     return False
 
-# Main function
+##Utility functions##
+def read_from_file(file_path):
+    try:
+        with open(file_path, 'r') as f:
+            return f.readlines()
+    except FileNotFoundError:
+        raise RuntimeError(f"{file_path} not found.")
+    except Exception as e:
+        raise RuntimeError(f"Unexpected error reading {file_path}: {str(e)}")
+    
+def write_to_file(file_path, lines, mode='w'):
+    try:
+        with open(file_path, mode) as f:
+            f.writelines(lines)
+        return True
+    except Exception as e:
+        logging.error(f"Unexpected error writing to {file_path}: {str(e)}")
+        return False    
+
+##Main function##
 def main():
     try: 
         setup_logging()
         config = load_config()
-        logging.info("Config.ini file successfully loaded")
-
-        # handle_commands(sys.argv)
+        handle_commands(sys.argv)
         
         # logging.info("Performing intial checks")
         # init_checks()
