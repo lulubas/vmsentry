@@ -315,7 +315,7 @@ def update_vmsentry():
 
             # Compare hashes
             if local_hash == remote_hash:
-                print(f"{file_name} is up-to-date.")
+                logging.info(f"{file_name} is up-to-date.")
                 continue
             
             # If hashes don't match, update the file
@@ -325,6 +325,9 @@ def update_vmsentry():
 
         except requests.RequestException as e:
             logging.error(f"Failed to update {file_name}: {e}")
+
+    print("Update completed.")
+    
 
 def calculate_hash(file_content):
     return hashlib.sha256(file_content).hexdigest()
