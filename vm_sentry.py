@@ -4,6 +4,8 @@ import subprocess
 import configparser
 from dataclasses import dataclass
 import argparse
+import requests
+import hashlib
 import re
 import collections
 from datetime import datetime, timedelta
@@ -35,14 +37,20 @@ def setup_logging():
     try:
         log_filename = '/etc/vmsentry/logs/vmsentry.log'
         entries_log_filename = '/etc/vmsentry/logs/IP.list'
-        formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s', datefmt="%b %d %H:%M:%S")
+        formatter = logging.Formatter('%(asctime)s %(message)s', datefmt="%b %d %H:%M:%S")
 
         # Setting up main logger
         handler = logging.FileHandler(log_filename)
         handler.setFormatter(formatter)
+
+        # Create a StreamHandler to write logs to stdout
+        stream_handler = logging.StreamHandler()
+        stream_handler.setFormatter(formatter)
+
         logger = logging.getLogger()
         logger.setLevel(logging.INFO)
         logger.addHandler(handler)
+        logger.addHandler(stream_handler)  # Add StreamHandler to main logger
 
         # Setting up logger for IP entries
         entries_handler = logging.FileHandler(entries_log_filename)
@@ -157,7 +165,7 @@ def handle_commands():
         #--update should update the script and required files to the latest version (git)
         parser.add_argument('--version', action='store_true', help='Print the current version of VMSentry')
         #--update should update the script and required files to the latest version (git)
-        # parser.add_argument('--update', action='store_true', help='Update to the newest version')
+        parser.add_argument('--update', action='store_true', help='Update to the newest version')
 
         args = parser.parse_args()
 
@@ -180,8 +188,8 @@ def handle_commands():
         if args.version:
             print(f"VM Sentry v{__version__}")
 
-        # if args.update:
-        #   update_vmsentry()
+        if args.update:
+            update_vmsentry()
 
     except Exception as e:
         raise RuntimeError(f"Error while handling command: {str(e)}")
@@ -273,6 +281,47 @@ def unblock_ip(ip, list_ip = None, chain = 'OUTGOING_MAIL'):
     except Exception as e:
         logging.error(f"Unexpected error unblocking IP {ip}: {str(e)}")
         return False
+    
+def update_vmsentry():
+    
+    #Relative paths of the files to update via the update script
+    files_to_update = [
+        'vm_sentry.py',
+        'config.ini',
+    ]
+
+    #Loop over each file and update them if they have some changes
+    for file_name in files_to_update:
+        url = f"https://raw.githubusercontent.com/lulubas/vmsentry/main/{file_name}"
+        try:
+            # Fetch file from GitHub
+            response = requests.get(url)
+            response.raise_for_status()  # Raise HTTPError for bad responses
+            remote_content = response.content
+
+            # Calculate remote file hash
+            remote_hash = calculate_hash(remote_content)
+
+            # Calculate local file hash
+            with open(file_name, 'rb') as f:
+                local_content = f.read()
+            local_hash = calculate_hash(local_content)
+
+            # Compare hashes
+            if local_hash == remote_hash:
+                print(f"{file_name} is up-to-date.")
+                continue
+
+            # If hashes don't match, update the file
+            with open(file_name, 'wb') as f:
+                f.write(remote_content)
+            logging.info(f"Successfully updated {file_name}")
+
+        except requests.RequestException as e:
+            logging.error(f"Failed to update {file_name}: {e}")
+
+def calculate_hash(file_content):
+    return hashlib.sha256(file_content).hexdigest()
 
 def init_checks():
     required_chains = ['OUTGOING_MAIL', 'LOG_AND_DROP']
@@ -545,32 +594,6 @@ def remove_line_from_file(filename, line_to_remove):
             if line.strip("\n") != line_to_remove.strip("\n"):
                 f.write(line)
 
-def handle_commands(argv):
-    chain_name = 'OUTGOING_MAIL'  # Replace with the chain name you want to use
-    log_dir = '/etc/vmsentry/logs/'
-    log_files = [
-        'install.log'
-        'iptables_all_25.log',
-        'iptables_dropped_25.log',
-        'vmsentry.log'
-    ]
-    if len(argv) > 1:
-        command = argv[1]
-        if command in ["flush-ip", "--flush-ip"]:
-            logging.info(f"Flushing the chain{chain_name}")
-            flush_chain(chain_name)
-            sys.exit(1)
-        elif command in ["flush-logs", "--flush-logs"]:
-            logging.info("Flushing log files")
-            flush_logs(log_files, log_dir)
-            sys.exit(1)
-        elif command in ["flush-all", "--flush-all"]:
-            logging.info("Flushing log files and iptables chains")
-            flush_chain(chain_name)
-            flush_logs(log_files, log_dir)
-            sys.exit(1)
-    return False
-
 ##Utility functions##
 def read_from_file(file_path):
     try:
@@ -595,7 +618,7 @@ def main():
     try: 
         setup_logging()
         config = load_config()
-        handle_commands(sys.argv)
+        handle_commands()
         
         # logging.info("Performing intial checks")
         # init_checks()
