@@ -623,7 +623,6 @@ def write_to_file(file_path, lines, mode='w'):
 def main():
     try: 
         handle_commands()
-        setup_logging()
         config = load_config()
         
         # logging.info("Performing intial checks")
