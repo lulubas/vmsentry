@@ -322,7 +322,7 @@ def update_vmsentry():
                 continue
             
             # If hashes don't match, update the file
-            print("Attempting to update the file...")
+            print("Attempting to update the fille...")
             with open(file_name, 'wb') as f:
                 f.write(remote_content)
             logging.info(f"Successfully updated {file_name}")
