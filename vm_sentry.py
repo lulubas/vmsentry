@@ -2,9 +2,9 @@ __version__ = '1.0.0'
 
 import subprocess
 import configparser
-from dataclasses import dataclass
+from dataclasses import dataclass #need to pip it
 import argparse
-import requests
+import requests #need to pip it
 import hashlib
 import re
 import collections
@@ -29,7 +29,7 @@ class Config:
     send_mail: bool
 
 #Setting up the logger
-def setup_logging():
+def setup_logging(verbose=False):
 
     #Set the limit (days) for how long to keep logs
     log_limit = 30
@@ -40,17 +40,17 @@ def setup_logging():
         formatter = logging.Formatter('%(asctime)s %(message)s', datefmt="%b %d %H:%M:%S")
 
         # Setting up main logger
-        handler = logging.FileHandler(log_filename)
-        handler.setFormatter(formatter)
-
-        # Create a StreamHandler to write logs to stdout
-        stream_handler = logging.StreamHandler()
-        stream_handler.setFormatter(formatter)
-
         logger = logging.getLogger()
         logger.setLevel(logging.INFO)
+        handler = logging.FileHandler(log_filename)
+        handler.setFormatter(formatter)
         logger.addHandler(handler)
-        logger.addHandler(stream_handler)  # Add StreamHandler to main logger
+
+        # Create a StreamHandler to write logs to stdout if verbose is enabled
+        if verbose:
+            stream_handler = logging.StreamHandler()
+            stream_handler.setFormatter(formatter)
+            logger.addHandler(stream_handler)
 
         # Setting up logger for IP entries
         entries_handler = logging.FileHandler(entries_log_filename)
@@ -156,6 +156,8 @@ def handle_commands():
     try:
         parser = argparse.ArgumentParser(description='VM Sentry monitors port 25 and block IP with unusual traffic')
         
+        #-v or --verbose should stream the logs to stdout) 
+        parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
         #--flush-logs should empty all .log files (except install.log) 
         parser.add_argument('--flush-logs', action='store_true', help='Flush log files')
         #--flush-ip should flush all ip when standalone or a specific ip when placed behind
@@ -168,6 +170,9 @@ def handle_commands():
         parser.add_argument('--update', action='store_true', help='Update to the newest version')
 
         args = parser.parse_args()
+
+        if args.verbose:
+            setup_logging()
 
         if args.flush_logs:
             flush_logs(log_files, log_dir)
@@ -616,9 +621,9 @@ def write_to_file(file_path, lines, mode='w'):
 ##Main function##
 def main():
     try: 
+        handle_commands()
         setup_logging()
         config = load_config()
-        handle_commands()
         
         # logging.info("Performing intial checks")
         # init_checks()
