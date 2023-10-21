@@ -321,11 +321,11 @@ def update_vmsentry():
             # If hashes don't match, update the file
             with open(file_name, 'wb') as f:
                 f.write(remote_content)
-            logging.info(f"Successfully updated {file_name}")
+            logging.info(f"{file_name} has been updated.")
 
         except requests.RequestException as e:
             logging.error(f"Failed to update {file_name}: {e}")
-
+        
     print("Update completed.")
     
 
