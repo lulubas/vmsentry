@@ -171,8 +171,12 @@ def handle_commands():
 
         args = parser.parse_args()
 
-        if args.verbose:
-            setup_logging()
+        if args.version:
+            print(f"VM Sentry v{__version__}")
+            sys.exit(0)
+        
+        #Setting up the logger with or without verbose
+        setup_logging(args.verbose)
 
         if args.flush_logs:
             flush_logs(log_files, log_dir)
@@ -189,9 +193,6 @@ def handle_commands():
         if args.flush_all:
             flush_chain()
             flush_logs(log_files, log_dir)
-
-        if args.version:
-            print(f"VM Sentry v{__version__}")
 
         if args.update:
             update_vmsentry()
