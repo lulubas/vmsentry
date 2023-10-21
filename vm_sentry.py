@@ -71,7 +71,7 @@ def rotate_logs(file_path, limit):
         logs = [log for log in logs if not is_log_rotate(log, limit)]
 
         #Write the logs to the file
-        write_to_file(file_path)
+        write_to_file(file_path, logs)
 
     except Exception as e:
         raise RuntimeError(f"An error occurred while rotating logs: {e}")
@@ -618,7 +618,7 @@ def main():
         # logging.info("Program run successfull. Exiting")
 
     except Exception as e:
-        logging.error(f"Error: {e}")
+        logging.error(f"{e}")
         sys.exit(1)
 
 if __name__ == '__main__':
