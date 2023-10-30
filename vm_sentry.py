@@ -4,6 +4,7 @@ import subprocess
 import configparser
 from dataclasses import dataclass #need to pip it
 import argparse
+import ipaddress
 import requests #need to pip it
 import hashlib
 import re
@@ -29,7 +30,7 @@ class Config:
     send_mail: bool
 
 #Setting up the logger
-def setup_logging(verbose=False):
+def setup_logging():
 
     #Set the limit (days) for how long to keep logs
     log_limit = 30
@@ -46,11 +47,10 @@ def setup_logging(verbose=False):
         handler.setFormatter(formatter)
         logger.addHandler(handler)
 
-        # Create a StreamHandler to write logs to stdout if verbose is enabled
-        if verbose:
-            stream_handler = logging.StreamHandler()
-            stream_handler.setFormatter(formatter)
-            logger.addHandler(stream_handler)
+        # Create a StreamHandler to write logs to stdout
+        stream_handler = logging.StreamHandler()
+        stream_handler.setFormatter(formatter)
+        logger.addHandler(stream_handler)
 
         # Setting up logger for IP entries
         entries_handler = logging.FileHandler(entries_log_filename)
@@ -75,30 +75,101 @@ def rotate_logs(file_path, limit):
         #Read the log file
         logs = read_from_file(file_path)
         
-        #Iterate over each log line and only keep the ones that do not need to rotate
-        logs = [log for log in logs if not is_log_rotate(log, limit)]
+        # Filter out logs that need to be rotated
+        filtered_logs = []
+
+        for log in logs:
+            timestamp = extract_timestamp_from_log(log)
+            if timestamp is None:
+                logging.info(f"Incorrect log line ({log}) will be deleted")
+            elif datetime.now() - timestamp < timedelta(days=limit):
+                filtered_logs.append(log)
 
         #Write the logs to the file
-        write_to_file(file_path, logs)
+        write_lines_to_file(file_path, logs)
 
     except Exception as e:
         raise RuntimeError(f"An error occurred while rotating logs: {e}")
-
-def is_log_rotate(log_line, limit, log_time_format="%b %d %H:%M:%S"):
+    
+def extract_timestamp_from_log(log_line, log_time_format="%b %d %H:%M:%S"):
     try:
-        #Strip out the date/hour from the log line
+        # Strip out the date/hour from the log line
         timestamp_logstr = " ".join(log_line.split()[:3])
 
         #Add the year and construct a timestamp object for the log
         current_year = datetime.now().year
         timestamp = datetime.strptime(f"{current_year} {timestamp_logstr}", f"%Y {log_time_format}")
 
-        #Return True/False if the log is younger/older than the limit set (days)
-        return datetime.now() - timestamp >= timedelta(days=limit)
-    
+        return timestamp
     except Exception as e:
-        logging.error(f"An error occurred while checking if log ({log_line}) has expired: {e}")
-        return False
+        logging.error(f"An error occurred while extracting timestamp from log ({log_line}): {e}.")
+        return None
+    
+# Running initial checks to ensure VM Sentry can run smoothly
+def init_checks():
+    #Check for the necessary chains OUTGOING_MAIL and LOG_AND_DROP
+    required_chains = ['OUTGOING_MAIL', 'LOG_AND_DROP']
+    if not all(is_chain_exists(chain) for chain in required_chains):
+        raise RuntimeError("One or more required chains do not exist.")
+    
+    #Check Consistency between IP.list and IP_tables
+    iptables_ip = set(list_blocked_ips().keys())
+    entries_ip = set(list_entries_ips().keys())
+
+    in_both = iptables_ip & entries_ip
+    only_in_iptables = iptables_ip - in_both
+    only_in_entries = entries_ip - in_both
+
+    for ip in only_in_iptables:
+        unblock_ip_iptables(ip)
+
+    for ip in only_in_entries:
+        unblock_ip_entries(ip)
+    
+def list_entries_ips ():
+    try:
+        #Read the IP list file
+        entries = read_from_file('/etc/vmsentry/logs/IP.list')
+
+        list_ips = {}
+
+        for entry in entries:
+            # Split the log entry at the "blocked:" keyword
+            ip = read_ip_entry(entry)
+            time = extract_timestamp_from_log(entry)
+            list_ips[ip] = datetime(time)
+            
+        return list_ips
+
+    except Exception as e:
+        logging.error(f'Error getting blocked IP entries: {str(e)}')
+        raise
+
+def read_ip_entry(entry):
+    try : 
+        parts = entry.split("blocked:")
+        if len(parts) >= 2:
+            # Take the part beofre "blocked:" and strip it to remove any leading/trailing whitespace
+            ip = parts[0].strip()
+            return ip
+    except Exception as e:
+        logging.error(f'Failed to extract IP from entry {entry}: {str(e)}')
+
+
+# Example usage:
+blocked_ip_set = blocked_ips_to_set()
+
+# Check if the iptables chain exists
+def is_chain_exists(chain):
+    try:
+        subprocess.check_output(f'iptables -L {chain} -n', shell=True)
+        return True
+    except subprocess.CalledProcessError as e:
+        logging.error(f'{chain} chain does not exist. Error message: {e.output.decode()}')
+        raise
+    except Exception as e:
+        logging.error(f'An unexpected error occurred while checking for {chain}: {str(e)}')
+        raise
 
 # Loading configration file and variables and return a Config class object
 def load_config() -> Config:
@@ -156,8 +227,6 @@ def handle_commands():
     try:
         parser = argparse.ArgumentParser(description='VM Sentry monitors port 25 and block IP with unusual traffic')
         
-        #-v or --verbose should stream the logs to stdout) 
-        parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
         #--flush-logs should empty all .log files (except install.log) 
         parser.add_argument('--flush-logs', action='store_true', help='Flush log files')
         #--flush-ip should flush all ip when standalone or a specific ip when placed behind
@@ -170,14 +239,7 @@ def handle_commands():
         parser.add_argument('--update', action='store_true', help='Update to the newest version')
 
         args = parser.parse_args()
-
-        if args.version:
-            print(f"VM Sentry v{__version__}")
-            sys.exit(0)
         
-        #Setting up the logger with or without verbose
-        setup_logging(args.verbose)
-
         if args.flush_logs:
             flush_logs(log_files, log_dir)
 
@@ -188,7 +250,10 @@ def handle_commands():
             #If it does come with an additional argument
             else:
                 specific_ip = args.flush_ip
-                unblock_ip(specific_ip)
+                if is_valid_ip(specific_ip):
+                    unblock_ip(specific_ip)
+                else:
+                    logging.info(f"{specific_ip} is not a valid IP address")
 
         if args.flush_all:
             flush_chain()
@@ -269,13 +334,13 @@ def unblock_ip(ip, list_ip = None, chain = 'OUTGOING_MAIL'):
 
     #Make sure that the rule exists for the corresponding ip
     if rule_number is None:
-        logging.error(f"No rule found for IP {ip}.")
+        logging.error(f"No iptables rule found for IP {ip}.")
         return False
-    
+
     try:
         #Remove the iptables rule for the desired IP address and check the exit status
-        block_command = f'iptables -D {chain} {rule_number}'
-        result = subprocess.run(block_command, shell=True, check=True)
+        unblock_command = f'iptables -D {chain} {rule_number}'
+        result = subprocess.run(unblock_command, shell=True, check=True)
         if result.returncode == 0:
             logging.info(f"Unblocked IP {ip}.")
         else:
@@ -287,7 +352,10 @@ def unblock_ip(ip, list_ip = None, chain = 'OUTGOING_MAIL'):
     except Exception as e:
         logging.error(f"Unexpected error unblocking IP {ip}: {str(e)}")
         return False
-    
+
+def unblock_ip_list(ip):
+def unblock_ip_iptables(ip):
+
 def update_vmsentry():
     
     #Relative paths of the files to update via the update script
@@ -331,21 +399,6 @@ def update_vmsentry():
 
 def calculate_hash(file_content):
     return hashlib.sha256(file_content).hexdigest()
-
-def init_checks():
-    required_chains = ['OUTGOING_MAIL', 'LOG_AND_DROP']
-    if not all(is_chain_exists(chain) for chain in required_chains):
-        raise RuntimeError("One or more required chains do not exist.")
-    
-# Check if the iptables chain exists
-def is_chain_exists(chain):
-    try:
-        subprocess.check_output(f'iptables -L {chain} -n', shell=True)
-        return True
-    except subprocess.CalledProcessError as e:
-        logging.error(f'{chain} chain does not exist. Exiting')
-        logging.error(f'Error message: {e.output.decode()}')
-        raise
 
 # Fetch the list of all guest VMs
 def get_vms():
@@ -470,8 +523,7 @@ def handle_ip(mode, connections, unique_ips, smtp_threshold, unique_ips_threshol
                         logging.info(f"[Monitor] Thresholds reached for {ip}")
                         logging.getLogger('entries').info(f"{ip} has reached the limits but remains unblocked ({connections[ip]} connections/{len(unique_ips[ip])} unique IPs)")
                     elif mode == 'block':
-                        block_ip(ip)
-                        logging.getLogger('entries').info(f"{ip} is blocked ({connections[ip]} connections/{len(unique_ips[ip])} unique IPs)")
+                        block_ip(ip, connections, unique_ips)
                     elif mode == 'limit':
                         limit_ip(ip, hash_limit_min, hash_limit_burst)
                         logging.getLogger('entries').info(f"{ip} is limited to {hash_limit_min}/min connections ({connections[ip]} connections/{len(unique_ips[ip])} unique IPs)")
@@ -541,11 +593,16 @@ def is_ip_blocked(ip, chain='OUTGOING_MAIL'):
         raise
 
 # Block IP address port 25 access when the threshold is reached
-def block_ip(ip):
+def block_ip(ip, reason):
     try:
+        #Blocking IP by adding an iptables rule
         block_command = f'iptables -A OUTGOING_MAIL -s {ip} -j LOG_AND_DROP'
         subprocess.run(block_command, shell=True)
-        logging.info(f"Blocking IP {ip}.")
+        logging.info(f"Added LOG_AND_DROP rule for {ip}.")
+        
+        #Logging IP Entry to IP.list file
+        logging.getLogger('entries').info(f"{ip} blocked: {reason}")
+
     except Exception as e:
         logging.error(f"Error blocking IP {ip}: {str(e)}")
 
@@ -613,36 +670,42 @@ def read_from_file(file_path):
     except Exception as e:
         raise RuntimeError(f"Unexpected error reading {file_path}: {str(e)}")
     
-def write_to_file(file_path, lines, mode='w'):
+def write_lines_to_file(file_path, lines, mode='w'):
     try:
         with open(file_path, mode) as f:
             f.writelines(lines)
         return True
     except Exception as e:
         logging.error(f"Unexpected error writing to {file_path}: {str(e)}")
-        return False    
+        return False
+
+def is_valid_ip(ip_str):
+    try:
+        ipaddress.ip_address(ip_str)
+        return True
+    except ValueError:
+        return False
 
 ##Main function##
 def main():
-    try: 
+    try:
+        setup_logging()
+        init_checks()
         handle_commands()
         config = load_config()
-        
-        # logging.info("Performing intial checks")
-        # init_checks()
 
         # logging.info("Fetching VM names and IP addresses")
-        # vms = get_vms()
-        # running_vms = get_running_vms(vms)
-        # vm_ips = get_vm_ips(running_vms)
-        # logging.info(f'Fetching successfull. Total VPS: {len(vms)}, {len(running_vms)} running')
+        vms = get_vms()
+        running_vms = get_running_vms(vms)
+        vm_ips = get_vm_ips(running_vms)
+        logging.info(f'Fetching successfull. Total VPS: {len(vms)}, {len(running_vms)} running')
 
         # logging.info(f"Parsing logs file more recent than {timeframe} hours")
-        # connections, unique_ips = parse_logs(timeframe)
-        # logging.info("Logs parsed successfully")
+        connections, unique_ips = parse_logs(timeframe)
+        logging.info("Logs parsed successfully")
 
-        # logging.info("Taking actions against IP addresses over quotas...")
-        # handle_ip(mode, connections, unique_ips, smtp_threshold, unique_ips_threshold, hash_limit_min, hash_limit_burst, from_addr, to_addr, send_mail)
+        logging.info("Taking actions against IP addresses over quotas...")
+        handle_ip(config.mode, connections, unique_ips, config.smtp_threshold, config.unique_ips_threshold, config.hash_limit_min, hash_limit_burst, from_addr, to_addr, send_mail)
         
         # logging.info("Removing IPs from iptables if they expired")
         # expire_ip(block_timelimit)        
