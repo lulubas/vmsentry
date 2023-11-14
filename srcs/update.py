@@ -38,7 +38,7 @@ def update_vmsentry():
 			
 			#Wrtie changes to the file 
 			with open(file_path, 'wb') as f:
-				f.write(remote_content)
+				f.write(remote_file)
 				logging.info(f"{file_name} has been updated.")
 			
 		except Exception as e:
