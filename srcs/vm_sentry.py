@@ -15,7 +15,7 @@ from args import handle_commands
 # from email.mime.multipart import MIMEMultipart
 # from email.mime.text import MIMEText
 
-##Main function##
+#Main function#
 def main():
 	try:
 		setup_logging(__version__)
