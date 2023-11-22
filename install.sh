@@ -1,15 +1,5 @@
 #!/bin/bash
 
-#Main structure
-echo "Starting installation of VMsentry..."
-initial_checks
-# install_script
-# install_python
-# install_mta
-# setup_iptables
-# setup_cron
-# echo "Install finished. Please check $LOG_FILE for the log" | tee -a $LOG_FILE
-
 # Perform initial checks
 initial_checks() {
 
@@ -17,30 +7,34 @@ initial_checks() {
 	[[ "$EUID" -ne 0 ]] && { echo "Please run as root"; exit 1; }
 	echo "Script running as root."
 
+	# Creating temporary folder for installation
+	mkdir -p /tmp/vmsentry || { echo "Failed to create /tmp/vmsentry temporary directory"; exit 1; }
+
 	# Set up logging
 	SCRIPT_DIR="/etc/vmsentry"
-	LOG_DIR="/etc/vmsentry/logs"
-	LOG_FILE="$LOG_DIR/install.log"
+	TEMP_DIR="/tmp/vmsentry"
+	LOG_FILE="$TEMP_DIR/install.log"
 
 	exec > >(tee -i $LOG_FILE)
 	exec 2>&1
-	echo "Logging setup successfully" | tee -a $LOG_FILE
+	echo "Logging setup successfully"
 
 	# Check if VMsentry already installed and confirm overwriting
 	if [ -d "$SCRIPT_DIR" ]; then
 		echo "VMsentry seems already installed."
 		read -p "Continuing will overwrite the current installation. Continue? (Y/n)" user_input
 		if [ "${user_input,,}" == "y" ]; then
-			echo "User chose to overwrite existing installation." | tee -a $LOG_FILE
+			echo "User chose to overwrite existing installation."
 		else
-			echo "Installation Aborted." | tee -a $LOG_FILE
+			echo "Installation Aborted."
 			exit 1
 		fi
-		echo "Deleting existing vmsentry files/directories/logs" | tee -a $LOG_FILE
-		rm -rf $SCRIPT_DIR || { echo "Failed to delete VMsentry directory" | tee -a $LOG_FILE ; exit 1; }
-		echo "VMsentry directory successfully cleaned up." | tee -a $LOG_FILE
+		
+		# Delete all files and directories except for the logs folder
+        find "$SCRIPT_DIR" -mindepth 1 -not -path "$SCRIPT_DIR/logs*" -exec rm -rf {} +
+		echo "VMsentry directory successfully cleaned up (while keeping logs)."
 	else
-		echo "VMsentry is not yet installed. Continuing." | tee -a $LOG_FILE
+		echo "VMsentry is not yet installed. Continuing."
 	fi
 
 	#Detecting system OS using different methods
@@ -48,19 +42,19 @@ initial_checks() {
 	if [ -f /etc/os-release ]; then
 		. /etc/os-release
 		OS=$NAME
-		echo "OS detected from /etc/os-release: $OS" | tee -a $LOG_FILE
+		echo "OS detected from /etc/os-release: $OS"
 	elif command -v lsb_release >/dev/null 2>&1; then
 		OS=$(lsb_release -si)
-		echo "OS detected from lsb_release:$OS" | tee -a $LOG_FILE
+		echo "OS detected from lsb_release:$OS"
 	elif [ -f /etc/debian_version ]; then
 		OS=Debian
-		echo "OS detected from /etc/debian_version: $OS" | tee -a $LOG_FILE
+		echo "OS detected from /etc/debian_version: $OS"
 	elif [ -f /etc/redhat-release ]; then
 		OS=Redhat
-		echo "OS detected from /etc/redhat-release: $OS" | tee -a $LOG_FILE
+		echo "OS detected from /etc/redhat-release: $OS"
 	else
 		OS=$(uname -s)
-		echo "OS detected from uname: $OS" | tee -a $LOG_FILE
+		echo "OS detected from uname: $OS"
 	fi
 
 	# Trim leading and trailing whitespaces and convert to lowercase
@@ -75,122 +69,85 @@ initial_checks() {
 			PKG_MANAGER="yum"
 			;;
 		*)
-			echo "OS not supported: $OS. VMsentry only compatible with Ubuntu, Debian, CentOS, RHEL, and AlmaLinux. Exiting." | tee -a $LOG_FILE
+			echo "OS not supported: $OS. VMsentry only compatible with Ubuntu, Debian, CentOS, RHEL, and AlmaLinux. Exiting."
 			exit 1
 			;;
 	esac
 }
 
 install_script() {
-	 # Check if unzip is installed and install it if it's not
+	# Check if unzip is installed and install it if it's not
 	if ! command -v unzip &> /dev/null; then
-		echo "Unzip could not be found" | tee -a $LOG_FILE
-		echo "Attempting to install unzip..." | tee -a $LOG_FILE
-		if [ "$OS" == "ubuntu" ] || [ "$OS" == "debian" ]; then
-			apt-get install unzip -y >/dev/null 2>&1 || { echo "Failed to install unzip on $OS" | tee -a $LOG_FILE ; exit 1; }
-		elif [ "$OS" == "centos linux" ] || [ "$OS" == "red hat enterprise linux" ]; then
-			yum install unzip -y >/dev/null 2>&1 || { echo "Failed to install unzip on $OS" | tee -a $LOG_FILE ; exit 1; }
-		else
-			echo "OS not supported for automatic unzip installation" | tee -a $LOG_FILE
-			exit 1
-		fi
-		echo "Unzip installed successfully" | tee -a $LOG_FILE
+		echo "Unzip could not be found. Installing it now..."
+		$PKG_MANAGER install unzip -y >/dev/null || { echo "Failed to install unzip using $PKG_MANAGER"; exit 1; }
+		echo "Unzip installed successfully"
+	else
+		echo "Unzip is installed"
 	fi
 
 	# Download the .zip file of the repository
-	echo "Downloading VMsentry" | tee -a $LOG_FILE
-	wget https://github.com/lulubas/vmsentry/archive/refs/heads/main.zip -O /etc/vmsentry/vmsentry.zip >/dev/null 2>&1 || { echo "Failed to download VMsentry" | tee -a $LOG_FILE ; exit 1; }
+	echo "Downloading VMsentry"
+	wget https://github.com/lulubas/vmsentry/archive/refs/heads/main.zip -O /tmp/vmsentry/vmsentry.zip >/dev/null || { echo "Failed to download VMsentry" ; exit 1; }
 
-	# Unzip the downloaded file (junking the directory structure)
-	echo "Unzipping VMsentry archive..." | tee -a $LOG_FILE
-	unzip -j /etc/vmsentry/vmsentry.zip -d /etc/vmsentry/ >/dev/null 2>&1 || { echo "Failed to unzip VMsentry archive" | tee -a $LOG_FILE ; exit 1; }
-	echo "Creating cron directory..." | tee -a $LOG_FILE
-	mkdir /etc/vmsentry/cron/ || { echo "Failed to create cron directory" | tee -a $LOG_FILE ; exit 1; }
-	echo "Moving cron wrapper into cron directory..." | tee -a $LOG_FILE
-	mv /etc/vmsentry/run_vmsentry.sh /etc/vmsentry/cron/ || { echo "Failed to move cron wrapper into cron directory" | tee -a $LOG_FILE ; exit 1; }
-	echo "Adding execution permission for cron wrapper script..." | tee -a $LOG_FILE
-	chmod +x /etc/vmsentry/cron/run_vmsentry.sh || { echo "Failed to change cron wrapper permission. Exiting." | tee -a $LOG_FILE ; exit 1; }
-	echo "Permission set correctly" | tee -a $LOG_FILE
+	# Create /etc/vmsentry if it doesn't exist
+	mkdir -p /etc/vmsentry || { echo "Failed to create /etc/vmsentry directory"; exit 1; }
 
-	# Remove the downloaded .zip file and useless files
-	echo "Removing installation archive..." | tee -a $LOG_FILE
-	rm /etc/vmsentry/vmsentry.zip || { echo "Failed to remove VMsentry archive" | tee -a $LOG_FILE ; exit 1; }
-	echo "VMsentry installation archive successfully removed" | tee -a $LOG_FILE
-	echo "Removing unnecessary git files..." | tee -a $LOG_FILE
-	rm /etc/vmsentry/.gitignore  || { echo "Failed to remove gtignore file" | tee -a $LOG_FILE ; exit 1; }
-	rm /etc/vmsentry/README.md || { echo "Failed to remove README file" | tee -a $LOG_FILE ; exit 1; }
-	echo "VMsentry downloaded and unzipped successfully" | tee -a $LOG_FILE
+	# Unzip the downloaded file
+	echo "Unzipping VMsentry archive..."
+	unzip -o /tmp/vmsentry/vmsentry.zip -d /tmp/vmsentry/ || { echo "Failed to unzip VMsentry archive"; exit 1; }
+
+	# Move the contents to /etc/vmsentry
+	echo "Moving VMsentry files..."
+	mv /tmp/vmsentry/vmsentry-main/* /etc/vmsentry/ || { echo "Failed to move VMsentry files"; exit 1; }
+
+	echo "VMsentry downloaded and set up successfully"
 }
 
-# Check and Install Python function
+# Install python and pip if not already installed. This is also going to update the package manager
 install_python() {
-	if command -v python3 &>/dev/null; then
-		echo "Python 3 is already installed."
+	#Check if Python3 is installed
+	if ! command -v python3 &>/dev/null; then
+		echo "Python3 is not yet installed. Installing it now..."
+		$PKG_MANAGER install python3 -y || { echo "Failed to install Python3 using $PKG_MANAGER"; exit 1; }
+		echo "python3 has been installed."
 	else
-		echo "Python 3 is not yet installed. Starting installation now..."
-		if [[ "$OS" == "ubuntu" || "$OS" == "debian" ]]; then
-			apt-get update | tee -a $LOG_FILE || { echo 'Updating packages failed' | tee -a $LOG_FILE ; exit 1; }
-			apt-get install python3 -y | tee -a $LOG_FILE || { echo 'Python3 installation failed' | tee -a $LOG_FILE ; exit 1; }
-		elif [[ "$OS" == "centos linux" || "$OS" == "almalinux" || "$OS" == "red hat enterprise linux" ]]; then
-			yum install python3 -y | tee -a $LOG_FILE || { echo 'Python3 installation failed' | tee -a $LOG_FILE ; exit 1; }
-		else
-			echo "Python installation not supported on this OS:$OS. Exiting." | tee -a $LOG_FILE
-			exit 1
-		fi
-		echo "Python 3 has been installed."
+		echo "python is installed."
 	fi
-}
 
-# Check and Install Postfix if no MTA is currently installed
-install_mta() {
-	if command -v sendmail &>/dev/null; then
-		echo "sendmail is already installed."
-	elif command -v exim &>/dev/null; then
-		echo "Exim is already installed."
-	elif command -v postfix &>/dev/null; then
-		echo "Postfix is already installed."
+	#Check if Pip3 is installed
+	if ! command -v pip3 &>/dev/null; then
+		echo "Pip3 is not yet installed. Installing it now..."
+		$PKG_MANAGER install python3-pip -y || { echo "Failed to install Python3 using $PKG_MANAGER"; exit 1; }
+		echo "pip3 has been installed."
 	else
-		echo "No MTA detected. Do you want to install Postfix? (Y/n)"
-		read user_input
-		if [ "${user_input,,}" == "y" ]; then
-			if [[ "$OS" == "ubuntu" || "$OS" == "debian" ]]; then
-				apt-get install postfix -y | tee -a $LOG_FILE || { echo 'Postfix installation failed. Exiting.' | tee -a $LOG_FILE ; exit 1; }
-			elif [[ "$OS" == "centOS linux" || "$OS" == "almalinux" || "$OS" == "red hat enterprise linux" ]]; then
-				yum install postfix -y | tee -a $LOG_FILE  || { echo 'Postfix installation failed. Exiting.' | tee -a $LOG_FILE ; exit 1; }
-			else
-				echo "Postfix installation not supported on this OS:$OS. Exiting." | tee -a $LOG_FILE
-				exit 1
-			fi
-			echo "Installation of Postfix successfull" | tee -a $LOG_FILE
-		else
-			echo "Installation cancelled. Exiting." | tee -a $LOG_FILE
-			exit 1
-		fi
+		echo "pip is installed."
 	fi
 }
 
 # Define a function to check if an interface is a NAT interface.
 # In this script, we're assuming that NAT interfaces have names that begin with "natbr".
-is_nat_interface() {
+is_interface() {
 	local interface=$1
-	[[ $interface == natbr* ]]
+	local interface_pattern=${INTERFACE_PATTERN:-"natbr*"}
+    [[ $interface == $interface_pattern ]]
 }
 
 # Setup iptables and required chains
-setup_iptables() {
-	# Check for iptables
-	if command -v iptables &>/dev/null; then
-		echo "iptables is already installed." | tee -a $LOG_FILE
+install_iptables() {
+	
+	# Check if iptables is installed
+	if ! command -v iptables &>/dev/null; then
+		echo "iptables is not installed. Attempting to install it..."
+		$PKG_MANAGER install iptables -y || { echo "Failed to install iptables using $PKG_MANAGER"; exit 1; }
 	else
-		echo "iptables is not installed. Make sure you run VMSentry on an iptables-enabled KVM host. Exiting." | tee -a $LOG_FILE
-		exit 1
+		echo "iptables is installed."
 	fi
+}
 
+setup_chains() {
 	# Setting up OUTGOING_MAIL chain
-	echo "Setting up port 25 monitoring via a new OUTGOING_MAIL chain" | tee -a $LOG_FILE
-	echo "Checking OUTGOING_MAIL chain..." | tee -a $LOG_FILE
 	if iptables -L OUTGOING_MAIL >/dev/null 2>&1; then
-		echo 'OUTGOING_MAIL chain already exists.' | tee -a $LOG_FILE
+		echo 'OUTGOING_MAIL chain already exists. Skipping.' | tee -a $LOG_FILE
 		read -p 'Flush the current OUTGOING_MAIL chain? This will remove IPs previously blocked  (Y/n)' user_input
 			if [ "${user_input,,}" == "y" ]; then
 				echo "Flushing OUTGOING_MAIL chain..." | tee -a $LOG_FILE
@@ -348,11 +305,21 @@ setup_cron() {
 	fi
 }
 
+ clean_up() {
+	# Saving install.log into the main directory
+	mv /tmp/vmsentry/install.log /etc/vmsentry/ || { echo 'Failed to move the installation log to the main vmsentry directory.'; }
+
+	# Clean up temporary installation folder
+	rm -rf /tmp/vmsentry || { echo 'Failed to remove temporary installation folder.'; }
+ }
+
+#Main structure
+
+echo "Starting installation of VMsentry..."
 initial_checks
 install_script
 install_python
-install_mta
-setup_iptables
-setup_cron
-
-echo "Install finished. Please check $LOG_FILE for the log" | tee -a $LOG_FILE
+# setup_iptables
+# setup_cron
+clean_up
+echo "Install finished. Please check $LOG_FILE for the log"
