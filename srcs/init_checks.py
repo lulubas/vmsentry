@@ -22,7 +22,6 @@ def init_checks(config: Config):
 			logging.info(f'{ip} unblocked after reaching its TTL ({config.block_timelimit} hours)')
 	
 	logging.info(f'Expired IPs have been removed ({deleted_count} removed)')
-	logging.info(f'==INITIALISATION COMPLETED==')
 
 # Checks that the required chains and their required rules exist
 def check_chains():

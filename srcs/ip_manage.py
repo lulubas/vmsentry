@@ -163,14 +163,3 @@ def block_ip(ip, reason):
 	else:
 		logging.info(f"{ip} already blocked. Skipping.")
 		return
-
-# # Limit IP address port 25 access when the threshold is reached
-# def limit_ip(ip, hash_limit_min, hash_limit_burst):
-#     try:
-#         block_command_1 = f'iptables -I OUTGOING_MAIL 2 -s {ip} -p tcp --dport 25 -j LOG_AND_DROP'
-#         block_command_2 = f'iptables -I OUTGOING_MAIL 2 -s {ip} -p tcp --dport 25 -m hashlimit --hashlimit {hash_limit_min}/min --hashlimit-burst {hash_limit_burst} --hashlimit-mode srcip --hashlimit-name smtp_limit -j ACCEPT'
-#         subprocess.run(block_command_1, shell=True)
-#         subprocess.run(block_command_2, shell=True)
-#         logging.info(f"IP {ip} access to port 25 has been rate limited.")
-#     except Exception as e:
-#         logging.error(f"Error limiting IP {ip}: {str(e)}")

@@ -2,6 +2,7 @@ import logging
 import hashlib
 import requests
 import os
+from utils import read_content_from_file, write_content_to_file
 
 #Update VMSentry with the latest files available on Github
 def update_vmsentry():
@@ -27,8 +28,7 @@ def update_vmsentry():
 			remote_hash = calculate_hash(remote_file)
 
 			# Calculate local file hash
-			with open(file_path, 'rb') as f:
-				local_file = f.read()
+			local_file = read_content_from_file(file_path, 'rb')
 			local_hash = calculate_hash(local_file)
 
 			#If the Hashes match, no need to update the file
@@ -37,9 +37,8 @@ def update_vmsentry():
 					continue
 			
 			#Wrtie changes to the file 
-			with open(file_path, 'wb') as f:
-				f.write(remote_file)
-				logging.info(f"{file_name} has been updated.")
+			write_content_to_file(remote_content, 'wb')
+			logging.info(f"{file_name} has been updated.")
 			
 		except Exception as e:
 			logging.error(f"Failed to update {file_name}: {e}")

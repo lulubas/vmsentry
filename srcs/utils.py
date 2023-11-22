@@ -2,15 +2,29 @@ import logging
 from datetime import datetime, timedelta
 import ipaddress
 
-# Read a file and return it as lines
-def read_lines_from_file(file_path):
-		with open(file_path, 'r') as f:
-			return f.readlines()
+# Read a file and return it as a list of strings
+def read_lines_from_file(file_path, mode='r'):
+	with open(file_path, mode) as file:
+		return file.readlines()
+
+# Read a file and return it as a single string
+def read_content_from_file(file_path, mode='r'):
+	with open(file_path, mode) as file:
+		return file.read()
 
 # Writes to a file with a list of lines provided (overwriting by default)
 def write_lines_to_file(file_path, lines, mode='w'):
-		with open(file_path, mode) as f:
-			f.writelines(lines)
+	with open(file_path, mode) as f:
+		f.writelines(lines)
+
+def write_content_to_file(file_path, content, mode='w'):
+	with open(file_path, mode) as f:
+		f.write(content)
+
+# Empties a given file
+def empty_file(file_path):
+	with open(file_path, 'w') as f:
+		pass
 
 # Return a timestamp object from a log line
 def extract_timestamp_from_log(log_line, log_time_format="%b %d %H:%M:%S"):
