@@ -1,5 +1,17 @@
 #!/bin/bash
 
+#######################
+#####CONFIGURATION#####
+#######################
+
+# Name of the main iptables chain that handles outgoing traffic from the VMs
+# By default on KVM host using Libvirt for traffic management it is called LIBVIRT_FWO (Libvirt Forward Out)
+OUTGOING_NETWORK_CHAIN="LIBVIRT_FWO"
+
+#######################
+###DO NOT EDIT BELOW###
+#######################
+
 # Perform initial checks
 initial_checks() {
 
@@ -124,14 +136,6 @@ install_python() {
 	fi
 }
 
-# Define a function to check if an interface is a NAT interface.
-# In this script, we're assuming that NAT interfaces have names that begin with "natbr".
-is_interface() {
-	local interface=$1
-	local interface_pattern=${INTERFACE_PATTERN:-"natbr*"}
-    [[ $interface == $interface_pattern ]]
-}
-
 # Setup iptables and required chains
 install_iptables() {
 	
@@ -144,105 +148,71 @@ install_iptables() {
 	fi
 }
 
+# Utility function to create an iptables chain and add a LOG rule in its first position
+create_chain() {
+    local chain_name=$1
+    local log_prefix=$2
+
+	# Check if the chain already exists and create it if it does not
+    if ! iptables -L "$chain_name" >/dev/null 2>&1; then
+        iptables -N "$chain_name" || { echo "An error occurred while creating $chain_name chain. Exiting."; exit 1; }
+        echo "$chain_name created successfully"
+    else
+        echo "$chain_name chain already exists."
+    fi
+
+	# Check if a LOG rule already exists and create it if it does not
+    if ! iptables -C "$chain_name" -j LOG --log-prefix "$log_prefix" --log-level 4 >/dev/null 2>&1; then
+        iptables -I "$chain_name" -j LOG --log-prefix "$log_prefix" --log-level 4 || { echo "An error occurred while adding LOG rule to $chain_name chain. Exiting."; exit 1; }
+        echo "$chain_name LOG rule added"
+    else
+        echo "$chain_name LOG rule already exists"
+    fi
+}
+
+# Utility function to create the DROP rule at the end of a given iptables chain
+create_drop_rule() {
+    local chain_name=$1
+
+	#Check if a DROP rule already exists and create it if it does not
+    if ! iptables -C "$chain_name" -j DROP >/dev/null 2>&1; then
+        iptables -A "$chain_name" -j DROP || { echo "An error occurred while adding DROP rule to $chain_name chain. Exiting."; exit 1; }
+        echo "$chain_name DROP rule added"
+    else
+        echo "$chain_name DROP rule already exists"
+    fi
+}
+
+# Utility function to redirect port 25 traffic to custom OUTGOING_MAIL chain
+create_jump_rule() {
+    local chain_name=$1
+
+	#Check if a the iptables rule already exists and create it if it does not
+    if ! iptables -C "$chain_name" -p tcp --dport 25 -j OUTGOING_MAIL >/dev/null 2>&1; then
+        iptables -I "$chain_name" -p tcp --dport 25 -j OUTGOING_MAIL || { echo "An error occurred while redirecting port 25 packets from $chain_name. Exiting."; exit 1; }
+        echo "$chain_name port 25 traffic redirected to OUTGOING_MAIL chain"
+    else
+        echo "$chain_name traffic already redirected to OUTGOING_MAIL"
+    fi
+}
+
+# Main function to create the required iptables chains and rules 
 setup_chains() {
-	# Setting up OUTGOING_MAIL chain
-	if iptables -L OUTGOING_MAIL >/dev/null 2>&1; then
-		echo 'OUTGOING_MAIL chain already exists. Skipping.' | tee -a $LOG_FILE
-		read -p 'Flush the current OUTGOING_MAIL chain? This will remove IPs previously blocked  (Y/n)' user_input
-			if [ "${user_input,,}" == "y" ]; then
-				echo "Flushing OUTGOING_MAIL chain..." | tee -a $LOG_FILE
-				iptables -F OUTGOING_MAIL || { echo 'An error occured while flushing OUTGOING_MAIL chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
-				echo "Flushing OUTGOING_MAIL chain successfull" | tee -a $LOG_FILE
-			else
-				echo "Keeping OUTGOING_MAIL chain as is. Pursuing installation." | tee -a $LOG_FILE
-			fi
-	else
-		echo "OUTGOING_MAIL chain does yet exist. Adding it." | tee -a $LOG_FILE
-		iptables -N OUTGOING_MAIL || { echo 'An error occured while creating OUTGOING_MAIL chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
-		echo "OUTGOING_MAIL created successfully" | tee -a $LOG_FILE
-	fi
-	
-	#checking and adding the OUTGOING_MAIL LOG rule
-	echo "Adding OUTGOING_MAIL LOG rule..." | tee -a $LOG_FILE
-	if ! iptables -C OUTGOING_MAIL -j LOG --log-prefix "[VMS#0] Logged: " --log-level 4 >/dev/null 2>&1; then
-		# If the rule doesn't exist, add it
-		echo "Adding OUTGOING_MAIL rules..." | tee -a $LOG_FILE
-		iptables -I OUTGOING_MAIL -j LOG --log-prefix "[VMS#0] Logged: " --log-level 4 || { echo 'An error occured while adding LOG rule to OUTGOING_MAIL chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
-		echo "OUTGOING_MAIL chain created and LOG rule added" | tee -a $LOG_FILE
-	else
-		# If the rule does exist, print a message
-		echo "The LOG rule already exists in the OUTGOING_MAIL chain. Pursuing..." | tee -a $LOG_FILE
-	fi
-	
-	# Detecting main NAT network interfaces, redirecting port 25 traffic to OUTGOING_MAIL chain
-	# Get the list of all network interfaces.
-	interfaces=$(ls /sys/class/net)
-	interface_found=0
-	# Loop over all network interfaces.
-	for interface in $interfaces; do
-		# If this is a NAT interface, add the iptables rules.
-		if is_nat_interface $interface; then
-			interface_found=1
-			echo "Detected NAT interface: $interface" | tee -a $LOG_FILE
-			if ! iptables -C LIBVIRT_FWO -i $interface -p tcp --dport 25 -j OUTGOING_MAIL >/dev/null 2>&1; then
-				echo "Rule does not exist for $interface. Adding it" | tee -a $LOG_FILE
-				iptables -I LIBVIRT_FWO -i $interface -p tcp --dport 25 -j OUTGOING_MAIL || { echo 'An error occured while adding rule. Exiting.' | tee -a $LOG_FILE ; exit 1; }
-				echo "Rule added successfully" | tee -a $LOG_FILE
-			else
-				echo "Rule for $interface already exists" | tee -a $LOG_FILE
-			fi
-		fi
-	done
-	if [[ $interface_found == 0 ]]; then
-			echo "No NAT interface found. Exiting" | tee -a $LOG_FILE
-			exit 1
-	fi
+    create_chain OUTGOING_MAIL "[VMS#0] Logged: "
+    create_chain LOG_AND_DROP "[VMS#1] Dropped: "
+    create_jump_rule LOG_AND_DROP
+	create_forward_rule $OUTGOING_NETWORK_CHAIN
+}
 
-	# Setuping up the LOG_AND_DROP chain and rules
-	echo "Checking LOG_AND_DROP chain..." | tee -a $LOG_FILE
-	if iptables -L LOG_AND_DROP >/dev/null 2>&1; then
-		echo 'LOG_AND_DROP chain already exists.' | tee -a $LOG_FILE
-		read -p 'Flush the current LOG_AND_DROP and recreate it? Say yes only if LOG_AND_DROP chain exists because of a previous VMSentry installation. (Y/n)' user_input
-			if [ "${user_input,,}" == "y" ]; then
-				echo "Flushing LOG_AND_DROP chain" | tee -a $LOG_FILE
-				iptables -F LOG_AND_DROP || { echo 'An error occured while flushing LOG_AND_DROP chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
-				echo "Flushing LOG_AND_DROP chain successfull" | tee -a $LOG_FILE
-			else
-				echo "Keeping the current LOG_AND_DROP chain ." | tee -a $LOG_FILE
-			fi
-	else
-		echo "LOG_AND_DROP chain does not yet exist. Adding it." | tee -a $LOG_FILE
-		iptables -N LOG_AND_DROP || { echo 'An error occured while creating LOG_AND_DROP chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
-		echo "LOG_AND_DROP created successfully" | tee -a $LOG_FILE
-	fi
-	echo "Adding LOG_AND_DROP rules." | tee -a $LOG_FILE
-	if ! iptables -C LOG_AND_DROP -j LOG --log-prefix "[VMS#1] Dropped: " --log-level 4 >/dev/null 2>&1; then
-		# If the rule doesn't exist, add it
-		echo "Adding LOG_AND_DROP LOG rules." | tee -a $LOG_FILE
-		iptables -I LOG_AND_DROP -j LOG --log-prefix "[VMS#1] Dropped: " --log-level 4 || { echo 'An error occured while adding LOG rule to OUTGOING_MAIL chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
-		echo "LOG rule added" | tee -a $LOG_FILE
-	else
-		# If the rule does exist, print a message
-		echo "The LOG rule already exists in LOG_AND_DROP. Pursuing..." | tee -a $LOG_FILE
-	fi
-
-	if ! iptables -C LOG_AND_DROP -j DROP >/dev/null 2>&1; then
-		# If the rule doesn't exist, add it
-		echo "Adding LOG_AND_DROP DROP rules." | tee -a $LOG_FILE
-		iptables -A LOG_AND_DROP -j DROP || { echo 'An error occured while adding DROP rule to LOG_AND_DROP chain. Exiting.' | tee -a $LOG_FILE ; exit 1; }
-	else
-		# If the rule does exist, print a message
-		echo "The DROP rule already exists in LOG_AND_DROP. Pursuing..." | tee -a $LOG_FILE
-	fi
-	echo "LOG_AND_DROP chain setup completed" | tee -a $LOG_FILE
+setup_rsyslog() {
 
 	# Change the log location via custom rsyslog configuration file
 	if  systemctl is-active --quiet rsyslog; then
-		echo "Rsyslog is running. Continuing..." | tee -a $LOG_FILE
+		echo "Rsyslog is running. Continuing..."
 	else
-		echo "Rsyslog is not running. Starting rsyslog now..." | tee -a $LOG_FILE
-		systemctl start rsyslog | tee -a $LOG_FILE || { echo 'Failed to start rsyslog. Exiting.' | tee -a $LOG_FILE ; exit 1; }
-		echo "Rsyslog started successfully." | tee -a $LOG_FILE
+		echo "Rsyslog is not running. Starting rsyslog now..."
+		systemctl start rsyslog || { echo 'Failed to start rsyslog. Exiting.'; exit 1; }
+		echo "Rsyslog started successfully."
 	fi
 
 	# Check if rsyslog is enabled
