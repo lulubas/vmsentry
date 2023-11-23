@@ -140,7 +140,7 @@ install_python() {
 	fi
 
 	#Install required depedencies for VMsentry to run
-	pip3 install -r $REQ_FILE || { echo "Failed to install depedencies"; exit 1; }
+	pip3 install --user -r $REQ_FILE || { echo "Failed to install depedencies"; exit 1; }
 }
 
 # Setup iptables and required chains
@@ -207,8 +207,8 @@ create_jump_rule() {
 setup_chains() {
 	create_chain OUTGOING_MAIL "[VMS#0] Logged: "
 	create_chain LOG_AND_DROP "[VMS#1] Dropped: "
-	create_jump_rule LOG_AND_DROP
-	create_forward_rule $OUTGOING_NETWORK_CHAIN
+	create_drop_rule LOG_AND_DROP
+	create_jump_rule $OUTGOING_NETWORK_CHAIN
 }
 
 # Configure rsyslog to generate custom logs
@@ -287,5 +287,7 @@ install_script
 install_python
 install_iptables
 setup_chains
+setup_rsyslog
+setup_cron
 clean_up
 echo "Install finished. Please check $LOG_FILE for the log"
