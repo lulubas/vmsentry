@@ -144,11 +144,11 @@ install_python() {
 		echo "libvirt development package is not installed. Installing it now..."
 		if [[ $PKG_MANAGER == "apt-get" ]]; then
 			$PKG_MANAGER install libvirt-dev -y || { echo "Failed to install libvirt-dev using $PKG_MANAGER"; exit 1; }
-		elif [[ $PKG_MANAGER == "yum"]]; then
+		elif [[ $PKG_MANAGER == "yum" ]]; then
 			$PKG_MANAGER install libvirt-devel -y || { echo "Failed to install libvirt-dev using $PKG_MANAGER"; exit 1; }
 		else
-            echo "Package manager not recognized. Cannot install libvirt development package."
-            exit 1
+			echo "Package manager not recognized. Cannot install libvirt development package."
+			exit 1
 		fi
 		echo "libvirt develomment package has been installed."
 	else
@@ -271,24 +271,24 @@ setup_cron() {
 	# Save existing cron jobs (without the existing vmsentry cron job if it already exists) to a temporary file
 	if crontab -l | grep -q "$CRON_NAME"; then
 		# Check the number of lines in the crontab
-        if [ "$(crontab -l | wc -l)" -eq 1 ]; then
-            # If only one line is present (ie. only the VMsentry cron job) simply create an empty temp file
-            echo -n > $CRON_TMP || { echo "Failed to create empty temp file"; exit 1; }
-            echo "Existing cron job has been deleted"
-        else
+		if [ "$(crontab -l | wc -l)" -eq 1 ]; then
+			# If only one line is present (ie. only the VMsentry cron job) simply create an empty temp file
+			echo -n > $CRON_TMP || { echo "Failed to create empty temp file"; exit 1; }
+			echo "Existing cron job has been deleted"
+		else
 			# More than one line present, remove the VMsentry job
-            crontab -l | grep -v "$CRON_NAME" > $CRON_TMP || { echo "Failed to remove current VMsentry job and write current crontab to file"; exit 1; }
-            echo "Existing cron job has been deleted, other cron jobs remain"
-        fi
+			crontab -l | grep -v "$CRON_NAME" > $CRON_TMP || { echo "Failed to remove current VMsentry job and write current crontab to file"; exit 1; }
+			echo "Existing cron job has been deleted, other cron jobs remain"
+		fi
 	else
 		crontab -l 2>/dev/null > $CRON_TMP || { echo "Failed to write current crontab to file"; exit 1; }
 	fi
 	
 	# Append the temporary file with the VMsentry cron job
-    echo "$CRON_JOB" >> $CRON_TMP || { echo "Failed to write temp file to crontab"; exit 1; }
+	echo "$CRON_JOB" >> $CRON_TMP || { echo "Failed to write temp file to crontab"; exit 1; }
 
-    # Install new cron file and delete temporary file
-    crontab $CRON_TMP || { echo "Failed to install new crontab. Exiting."; exit 1; }
+	# Install new cron file and delete temporary file
+	crontab $CRON_TMP || { echo "Failed to install new crontab. Exiting."; exit 1; }
 	echo "New cron job set up successfully to run every $CRON_INTERVAL minutes."
 }
 
