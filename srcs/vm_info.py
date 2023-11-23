@@ -91,7 +91,7 @@ def get_vm_info(config: Config):
 
 	return(vms)
 
-#Fetch the IP address associated with a given Mac addresusing the arp command
+#Fetch the IP address associated with a given Mac address using the arp command
 def get_ip_from_arp(mac_address):
 	try:
 		# Run the arp -n command and get its output
