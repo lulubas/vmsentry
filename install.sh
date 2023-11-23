@@ -175,9 +175,9 @@ install_python() {
 			echo "Package manager not recognized. Cannot install libvirt development package."
 			exit 1
 		fi
-		echo "libvirt develomment package has been installed."
+		echo "libvirt development package has been installed."
 	else
-		echo "libvirt develomment package is installed."
+		echo "libvirt development package is installed."
 	fi
 
 	#Install required depedencies for VMsentry to run
