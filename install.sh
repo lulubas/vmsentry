@@ -119,8 +119,14 @@ install_script() {
 	echo "VMsentry downloaded and set up successfully"
 }
 
-# Install python and pip if not already installed. This is also going to update the package manager
+# Install python, pip and the necessary packages to run vmsentry if not already installed.
 install_python() {
+
+	# Get the Python version and potential header locations (needed for installing development package)
+	PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+	PYTHON_H_PATH1="/usr/include/python${PYTHON_VERSION}/Python.h"
+	PYTHON_H_PATH2="/usr/include/python${PYTHON_VERSION}m/Python.h"	
+
 	#Check if Python3 is installed
 	if ! command -v python3 &>/dev/null; then
 		echo "Python3 is not yet installed. Installing it now..."
@@ -137,6 +143,22 @@ install_python() {
 		echo "pip3 has been installed."
 	else
 		echo "pip is installed."
+	fi
+
+	# Check if Python development package is already installed by checking the presence of headers
+	if [ -f "$PYTHON_H_PATH1" ] || [ -f "$PYTHON_H_PATH2" ]; then
+		echo "Python development headers are installed for Python ${PYTHON_VERSION}."
+	else
+		echo "Python development headers are not installed for Python ${PYTHON_VERSION}. Installing them now..."
+		if [[ $PKG_MANAGER == "apt-get" ]]; then
+			$PKG_MANAGER install python${PYTHON_VERSION}-dev -y || { echo "Failed to install python${PYTHON_VERSION}-dev using $PKG_MANAGER"; exit 1; }
+		elif [[ $PKG_MANAGER == "yum" ]]; then
+			$PKG_MANAGER install python${PYTHON_VERSION}-devel -y || { echo "Failed to install python${PYTHON_VERSION}-devel using $PKG_MANAGER"; exit 1; }
+		else
+			echo "Package manager not recognized. Cannot install Python development headers."
+			exit 1
+		fi
+		echo "Python development headers have been installed for Python ${PYTHON_VERSION}."
 	fi
 
 	#Check if libvirt development package is installed
