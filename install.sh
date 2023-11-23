@@ -225,9 +225,9 @@ setup_rsyslog() {
 	# Check if rsyslog is enabled and enable it if it is not
 	if ! systemctl is-enabled --quiet rsyslog; then
 		systemctl enable rsyslog || { echo 'Failed to enable rsyslog. Exiting.'; exit 1; }
-		echo "Rsyslog has been enabled at startup" | tee -a $LOG_FILE
+		echo "Rsyslog has been enabled at startup"
 	else
-		echo "Rsyslog is enabled at startup" | tee -a $LOG_FILE
+		echo "Rsyslog is enabled at startup"
 	fi
 
 	# Change the log location via rsyslog configuration file
@@ -236,7 +236,7 @@ setup_rsyslog() {
 	fi
 
 	#Create/overwrite rsyslog custom  file to redirect custom logs to the VMSentry directory
-	echo -e ':msg, contains, "VMS#0" /etc/vmsentry/logs/iptables_all_25.log\n& stop\n:msg, contains, "VMS#1" /etc/vmsentry/logs/iptables_dropped_25.log\n& stop' > /etc/rsyslog.d/vms_iptables.conf || { echo 'Failed to edit VMS log location in rsyslog. Exiting.' | tee -a $LOG_FILE ; exit 1; }   
+	echo -e ':msg, contains, "VMS#0" /etc/vmsentry/logs/iptables_all_25.log\n& stop\n:msg, contains, "VMS#1" /etc/vmsentry/logs/iptables_dropped_25.log\n& stop' > /etc/rsyslog.d/vms_iptables.conf || { echo 'Failed to edit VMS log location in rsyslog. Exiting.'; exit 1; }   
 	echo "Rsyslog custom configuration file has been setup"
 
 	#Restart rsyslog service
@@ -254,14 +254,22 @@ setup_cron() {
 	
 	# Save existing cron jobs (without the existing vmsentry cron job if it already exists) to a temporary file
 	if crontab -l | grep -q "$CRON_NAME"; then
-		crontab -l | grep -v "$CRON_NAME" > $CRON_TMP || { echo "Failed to write current crontab to file. Exiting."; }
-		echo "Existing cron job has been deleted"
+		# Check the number of lines in the crontab
+        if [ "$(crontab -l | wc -l)" -eq 1 ]; then
+            # If only one line is present (ie. only the VMsentry cron job) simply create an empty temp file
+            echo -n > $CRON_TMP || { echo "Failed to create empty temp file"; exit 1; }
+            echo "Existing cron job has been deleted"
+        else
+			# More than one line present, remove the VMsentry job
+            crontab -l | grep -v "$CRON_NAME" > $CRON_TMP || { echo "Failed to remove current VMsentry job and write current crontab to file"; exit 1; }
+            echo "Existing cron job has been deleted, other cron jobs remain"
+        fi
 	else
-		crontab -l 2>/dev/null > $CRON_TMP
+		crontab -l 2>/dev/null > $CRON_TMP || { echo "Failed to write current crontab to file"; exit 1; }
 	fi
 	
 	# Append the temporary file with the VMsentry cron job
-    echo "$CRON_JOB" >> $CRON_TMP
+    echo "$CRON_JOB" >> $CRON_TMP || { echo "Failed to write temp file to crontab"; exit 1; }
 
     # Install new cron file and delete temporary file
     crontab $CRON_TMP || { echo "Failed to install new crontab. Exiting."; exit 1; }
@@ -272,10 +280,10 @@ setup_cron() {
  clean_up() {
 
 	# Moving installation logfile into the main VMsentry directory
-	mv $LOG_FILE $SCRIPT_DIR || { echo 'Failed to move the installation log to the main vmsentry directory.'; }
+	mv $LOG_FILE $SCRIPT_DIR || echo 'Failed to move the installation log to the main vmsentry directory.'
 
 	# Clean up temporary installation folder
-	rm -rf $TEMP_DIR || { echo 'Failed to remove temporary installation folder.'; }
+	rm -rf $TEMP_DIR || echo 'Failed to remove temporary installation folder.'
 	echo "Installation temporary files deleted"
 }
 
