@@ -154,9 +154,9 @@ install_python() {
 	else
 		echo "Python development headers are not installed for Python ${PYTHON_VERSION_HEADER}. Installing them now..."
 		if [[ $PKG_MANAGER == "apt-get" ]]; then
-			$PKG_MANAGER install python${PYTHON_VERSION_PKG}-dev -y || { echo "Failed to install python${PYTHON_VERSION_PKG}-dev using $PKG_MANAGER"; exit 1; }
+			$PKG_MANAGER install ${PYTHON_VERSION_PKG}-dev -y || { echo "Failed to install ${PYTHON_VERSION_PKG}-dev using $PKG_MANAGER"; exit 1; }
 		elif [[ $PKG_MANAGER == "yum" ]]; then
-			$PKG_MANAGER install python${PYTHON_VERSION_PKG}-devel -y || { echo "Failed to install python${PYTHON_VERSION_PKG}-devel using $PKG_MANAGER"; exit 1; }
+			$PKG_MANAGER install ${PYTHON_VERSION_PKG}-devel -y || { echo "Failed to install ${PYTHON_VERSION_PKG}-devel using $PKG_MANAGER"; exit 1; }
 		else
 			echo "Package manager not recognized. Cannot install Python development headers."
 			exit 1
