@@ -1,15 +1,3 @@
-logging
-argparse
-subprocess
-dataclasses
-datetime
-sys
-smtplib
-email.mime.text
-email.mime.multipart
 requests
-hashlib
-os
-ipaddress
-libvirt
-re
+libvirt-python
+dataclasses; python_version < '3.7'
