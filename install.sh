@@ -197,9 +197,9 @@ create_jump_rule() {
 	#Check if a the iptables rule already exists and create it if it does not
 	if ! iptables -C "$chain_name" -p tcp --dport 25 -j OUTGOING_MAIL >/dev/null 2>&1; then
 		iptables -I "$chain_name" -p tcp --dport 25 -j OUTGOING_MAIL || { echo "An error occurred while redirecting port 25 packets from $chain_name. Exiting."; exit 1; }
-		echo "$chain_name port 25 traffic redirected to OUTGOING_MAIL chain"
+		echo "$chain_name SMTP traffic now redirects to OUTGOING_MAIL chain"
 	else
-		echo "$chain_name traffic already redirected to OUTGOING_MAIL"
+		echo "$chain_name SMTP traffic already redirects to OUTGOING_MAIL"
 	fi
 }
 
