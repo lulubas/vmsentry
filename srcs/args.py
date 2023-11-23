@@ -106,7 +106,7 @@ def flush_logs(log_files, log_dir):
 		file_path = f"{log_dir}{log_file}"
 		try:
 			empty_file(file_path)
-			logging.info(f"{full_path} emptied.")
+			logging.info(f"{file_path} emptied.")
 		except Exception as e:
 			logging.error(f"An error occurred while emptying {log_file}: {e}")
 			raise
