@@ -139,6 +139,22 @@ install_python() {
 		echo "pip is installed."
 	fi
 
+	#Check if libvirt development package is installed
+	if ! pkg-config --exists libvirt; then
+		echo "libvirt development package is not installed. Installing it now..."
+		if [[ $PKG_MANAGER == "apt-get" ]]; then
+			$PKG_MANAGER install libvirt-dev -y || { echo "Failed to install libvirt-dev using $PKG_MANAGER"; exit 1; }
+		elif [[ $PKG_MANAGER == "yum"]]; then
+			$PKG_MANAGER install libvirt-devel -y || { echo "Failed to install libvirt-dev using $PKG_MANAGER"; exit 1; }
+		else
+            echo "Package manager not recognized. Cannot install libvirt development package."
+            exit 1
+		fi
+		echo "libvirt develomment package has been installed."
+	else
+		echo "libvirt develomment package is installed."
+	fi
+
 	#Install required depedencies for VMsentry to run
 	pip3 install --user -r $REQ_FILE || { echo "Failed to install depedencies"; exit 1; }
 }
