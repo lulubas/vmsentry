@@ -122,10 +122,13 @@ install_script() {
 # Install python, pip and the necessary packages to run vmsentry if not already installed.
 install_python() {
 
-	# Get the Python version and potential header locations (needed for installing development package)
-	PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-	PYTHON_H_PATH1="/usr/include/python${PYTHON_VERSION}/Python.h"
-	PYTHON_H_PATH2="/usr/include/python${PYTHON_VERSION}m/Python.h"	
+	# Get the Python version in two formats (one with a dot and one without) and potential header locations
+	# These are needed for installing development package)
+	PYTHON_VERSION_PKG=$(python3 -c "import sys; print(f'python{sys.version_info.major}{sys.version_info.minor}')")
+
+	PYTHON_VERSION_HEADER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+	PYTHON_H_PATH1="/usr/include/python${PYTHON_VERSION_HEADER}/Python.h"
+	PYTHON_H_PATH2="/usr/include/python${PYTHON_VERSION_HEADER}m/Python.h"	
 
 	#Check if Python3 is installed
 	if ! command -v python3 &>/dev/null; then
@@ -147,18 +150,18 @@ install_python() {
 
 	# Check if Python development package is already installed by checking the presence of headers
 	if [ -f "$PYTHON_H_PATH1" ] || [ -f "$PYTHON_H_PATH2" ]; then
-		echo "Python development headers are installed for Python ${PYTHON_VERSION}."
+		echo "Python development headers are installed for Python ${PYTHON_VERSION_HEADER}."
 	else
-		echo "Python development headers are not installed for Python ${PYTHON_VERSION}. Installing them now..."
+		echo "Python development headers are not installed for Python ${PYTHON_VERSION_HEADER}. Installing them now..."
 		if [[ $PKG_MANAGER == "apt-get" ]]; then
-			$PKG_MANAGER install python${PYTHON_VERSION}-dev -y || { echo "Failed to install python${PYTHON_VERSION}-dev using $PKG_MANAGER"; exit 1; }
+			$PKG_MANAGER install python${PYTHON_VERSION_PKG}-dev -y || { echo "Failed to install python${PYTHON_VERSION_PKG}-dev using $PKG_MANAGER"; exit 1; }
 		elif [[ $PKG_MANAGER == "yum" ]]; then
-			$PKG_MANAGER install python${PYTHON_VERSION}-devel -y || { echo "Failed to install python${PYTHON_VERSION}-devel using $PKG_MANAGER"; exit 1; }
+			$PKG_MANAGER install python${PYTHON_VERSION_PKG}-devel -y || { echo "Failed to install python${PYTHON_VERSION_PKG}-devel using $PKG_MANAGER"; exit 1; }
 		else
 			echo "Package manager not recognized. Cannot install Python development headers."
 			exit 1
 		fi
-		echo "Python development headers have been installed for Python ${PYTHON_VERSION}."
+		echo "Python development headers have been installed for Python ${PYTHON_VERSION_HEADER}."
 	fi
 
 	#Check if libvirt development package is installed
