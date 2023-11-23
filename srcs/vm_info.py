@@ -85,7 +85,7 @@ def get_vm_info(config: Config):
 	#Add if the IP address is currently blocked 
 	
 	#Print out VMs info and activity summary per VM
-	print_vms_info(vms)
+	print_vms_info(vms, config)
 
 	logging.info(f'VM data and stmp activity parsed')
 
@@ -179,7 +179,7 @@ def parse_smtp_activity(vms, config: Config, filepath = '/etc/vmsentry/logs/ipta
 			continue
 
 #Print out the VMs information and SMTP activity parsed from the logs
-def print_vms_info(vms):
+def print_vms_info(vms, config: Config):
 	#Columns widths
 	column_widths = {'name': 10, 'state': 8, 'ip': 15, 'smtp_connections': 16, 'unique_dst_ips': 10, 'blocked': 10}
 	total_width = sum(column_widths.values()) + len(column_widths) * 3
@@ -188,7 +188,7 @@ def print_vms_info(vms):
 	print("+" + "-" * (total_width - 2) + "+")
 
 	# Title centered within the box
-	title = "VM Network Activity Summary"
+	title = f"VM Network Activity Summary (past {config.timeframe} hours)"
 	print("|" + title.center(total_width - 2) + "|")
 
 	# Title bottom border
