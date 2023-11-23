@@ -1,4 +1,4 @@
 requests
-libvirt-dev
+libvirt
 libvirt-python
 dataclasses; python_version < '3.7'
