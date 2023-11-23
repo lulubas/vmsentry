@@ -1,5 +1,4 @@
 import logging
-from datetime import datetime, timedelta
 import subprocess
 from utils import is_valid_ip, read_lines_from_file, extract_timestamp_from_log, write_lines_to_file
 
