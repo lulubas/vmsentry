@@ -249,23 +249,23 @@ setup_cron() {
 	
 	# Name of the cron job for easy identification and declare it
 	CRON_NAME="VMsentry"
-	CURRENT_PATH=$(pwd)
+	CRON_TMP="$SCRIPT_DIR/cron_tmp"
 	CRON_JOB="*/$CRON_INTERVAL * * * *  /etc/vmsentry/cron/vmsentry.sh > /etc/vmsentry/cron/cron.log 2>&1 # $CRON_NAME"
 	
 	# Save existing cron jobs (without the existing vmsentry cron job if it already exists) to a temporary file
 	if crontab -l | grep -q "$CRON_NAME"; then
-		crontab -l | grep -v "$CRON_NAME" > cron_tmp || { echo "Failed to write current crontab to file. Exiting."; exit 1; }
+		crontab -l | grep -v "$CRON_NAME" > $CRON_TMP || { echo "Failed to write current crontab to file. Exiting."; exit 1; }
 		echo "Existing cron job has been deleted"
 	else
-		crontab -l 2>/dev/null > cron_tmp
+		crontab -l 2>/dev/null > $CRON_TMP
 	fi
 	
 	# Append the temporary file with the VMsentry cron job
-    echo "$CRON_JOB" >> cron_tmp
+    echo "$CRON_JOB" >> $CRON_TMP
 
     # Install new cron file and delete temporary file
-    crontab cron_tmp || { echo "Failed to install new crontab. Exiting."; exit 1; }
-    rm cron_tmp
+    crontab $CRON_TMP || { echo "Failed to install new crontab. Exiting."; exit 1; }
+    rm $CRON_TMP
 	echo "New cron job set up successfully to run every $CRON_INTERVAL minutes."
 }
 
