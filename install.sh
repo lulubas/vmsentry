@@ -239,9 +239,9 @@ create_jump_rule() {
 	local chain_name=$1
 	local interface=$2
 
-	for interface in $(ls /sys/class/net | grep "$pattern"); do
+	for interface in $(ls /sys/class/net | grep "$interface"); do
         # Check if the iptables rule already exists for this interface
-        if ! iptables -C LIBVIRRT_FWO -i "$interface" -p tcp --dport 25 -j OUTGOING_MAIL >/dev/null 2>&1; then
+        if ! iptables -C LIBVIRT_FWO -i "$interface" -p tcp --dport 25 -j OUTGOING_MAIL >/dev/null 2>&1; then
             # Rule does not exist, create it
             iptables -I LIBVIRT_FWO -i "$interface" -p tcp --dport 25 -j OUTGOING_MAIL || { echo "An error occurred while redirecting port 25 packets from $interface in $chain_name. Exiting."; exit 1; }
             echo "SMTP traffic on $interface now redirects to OUTGOING_MAIL chain"
