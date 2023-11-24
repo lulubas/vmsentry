@@ -7,6 +7,9 @@
 # Name of the main iptables chain that handles outgoing traffic from the VMs
 # By default on KVM host using Libvirt for traffic management it is called LIBVIRT_FWO (Libvirt Forward Out)
 OUTGOING_NETWORK_CHAIN="LIBVIRT_FWO"
+
+# Interface name that is used by VMs for outgoing traffic. (Can be a pattern like "natbr" then all interfaces "natbrXX" will be used)
+INTERFACE="natbr"
 #Interval of time between each run in minutes (Default : 20)
 CRON_INTERVAL=20
 
@@ -234,14 +237,18 @@ create_drop_rule() {
 # Utility function to redirect port 25 traffic to custom OUTGOING_MAIL chain
 create_jump_rule() {
 	local chain_name=$1
+	local interface=$2
 
-	#Check if a the iptables rule already exists and create it if it does not
-	if ! iptables -C "$chain_name" -p tcp --dport 25 -j OUTGOING_MAIL >/dev/null 2>&1; then
-		iptables -I "$chain_name" -p tcp --dport 25 -j OUTGOING_MAIL || { echo "An error occurred while redirecting port 25 packets from $chain_name. Exiting."; exit 1; }
-		echo "$chain_name SMTP traffic now redirects to OUTGOING_MAIL chain"
-	else
-		echo "$chain_name SMTP traffic already redirects to OUTGOING_MAIL"
-	fi
+	for interface in $(ls /sys/class/net | grep "$pattern"); do
+        # Check if the iptables rule already exists for this interface
+        if ! iptables -C FORWARD -i "$interface" -p tcp --dport 25 -j OUTGOING_MAIL >/dev/null 2>&1; then
+            # Rule does not exist, create it
+            iptables -I FORWARD -i "$interface" -p tcp --dport 25 -j OUTGOING_MAIL || { echo "An error occurred while redirecting port 25 packets from $interface in $chain_name. Exiting."; exit 1; }
+            echo "SMTP traffic on $interface now redirects to OUTGOING_MAIL chain"
+        else
+            echo "SMTP traffic rule already exists for $interface"
+        fi
+    done
 }
 
 # Main function to create the required iptables chains and rules 
@@ -249,7 +256,7 @@ setup_chains() {
 	create_chain OUTGOING_MAIL "[VMS#0] Logged: "
 	create_chain LOG_AND_DROP "[VMS#1] Dropped: "
 	create_drop_rule LOG_AND_DROP
-	create_jump_rule $OUTGOING_NETWORK_CHAIN
+	create_jump_rule $OUTGOING_NETWORK_CHAIN $INTERFACE
 }
 
 # Configure rsyslog to generate custom logs
