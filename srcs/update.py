@@ -8,7 +8,7 @@ from utils import read_content_from_file, write_content_to_file
 def update_vmsentry():
 	base_url = "https://raw.githubusercontent.com/lulubas/vmsentry/main/"
 	srcs_dir = '/etc/vmsentry/srcs/'
-	config_ini = '/etc/vmsentry/config.ini'
+	config_ini = '/etc/vmsentry/config/config.ini'
 
 	#get list of all .py files to update in the srcs directory
 	files_to_update = generate_file_paths(srcs_dir, config_ini)
@@ -16,7 +16,7 @@ def update_vmsentry():
 	for file_path in files_to_update:
 		#Iterates over file names and add the base directory when necessary
 		file_name = os.path.basename(file_path)
-		url = base_url + ('srcs/' if file_path != config_ini else '') + file_name
+		url = base_url + ('srcs/' if file_path != config_ini else 'config/') + file_name
 		
 		try :
 			#Fetch corresponding file from GitHub
@@ -37,7 +37,7 @@ def update_vmsentry():
 					continue
 			
 			#Wrtie changes to the file 
-			write_content_to_file(remote_content, 'wb')
+			write_content_to_file(remote_file, 'wb')
 			logging.info(f"{file_name} has been updated.")
 			
 		except Exception as e:

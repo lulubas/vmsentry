@@ -1,5 +1,6 @@
 import logging
 import configparser
+import os
 from dataclasses import dataclass
 
 @dataclass
@@ -22,27 +23,35 @@ class Config:
 # Loading configration file and variables and return a Config class object
 def load_config() -> Config:
 	try:
-		#Create the config object using the configparser library
+		#Create the config object
 		config = configparser.ConfigParser()
-		config.read('/etc/vmsentry/config.ini')
+
+		#Load the base/custom configuration files
+		config_path = '/etc/vmsentry/config/config.ini'
+		override_config_path = '/etc/vmsentry/config/config.override.ini'
+
+		config.read(config_path)
+
+		if os.path.exists(override_config_path):
+			config.read(override_config_path)
 
 		# Use Config class to store the config.ini values
 		conf = Config(
-            timeframe=int(config.get('settings', 'timeframe')),
-            smtp_connections_limit=int(config.get('settings', 'smtp_connections_limit')),
-            unique_ips_limit=int(config.get('settings', 'unique_ips_limit')),
-            block_timelimit=int(config.get('settings', 'block_timelimit')),
-            block_ip=config.getboolean('settings', 'block_ip'),
-            send_email=config.getboolean('email', 'send_email'),
-            from_smtp_host=config.get('email', 'from_smtp_host'),
-            from_smtp_port=int(config.get('email', 'from_smtp_port')),
-            from_email_addr=config.get('email', 'from_email_addr'),
-            from_email_pw=config.get('email', 'from_email_pw'),
-            to_recipient=config.get('email', 'to_recipient'),
-            send_telegram=config.getboolean('telegram', 'send_telegram'),
-            telegram_api=config.get('telegram', 'telegram_api'),
-            telegram_chat_id=config.get('telegram', 'telegram_chat_id')
-        )
+			timeframe=int(config.get('settings', 'timeframe')),
+			smtp_connections_limit=int(config.get('settings', 'smtp_connections_limit')),
+			unique_ips_limit=int(config.get('settings', 'unique_ips_limit')),
+			block_timelimit=int(config.get('settings', 'block_timelimit')),
+			block_ip=config.getboolean('settings', 'block_ip'),
+			send_email=config.getboolean('email', 'send_email'),
+			from_smtp_host=config.get('email', 'from_smtp_host'),
+			from_smtp_port=int(config.get('email', 'from_smtp_port')),
+			from_email_addr=config.get('email', 'from_email_addr'),
+			from_email_pw=config.get('email', 'from_email_pw'),
+			to_recipient=config.get('email', 'to_recipient'),
+			send_telegram=config.getboolean('telegram', 'send_telegram'),
+			telegram_api=config.get('telegram', 'telegram_api'),
+			telegram_chat_id=config.get('telegram', 'telegram_chat_id')
+		)
 
 		# Check that each configurations fits into the pre-determined limits
 		limits = {
