@@ -73,6 +73,8 @@ def are_rules_present(chain, rules):
 #Checks consistency between entries in IP.list file and iptables
 def check_ip_match():
 	iptables_ip = set(list_iptables_ips().keys())
+	print("liste d'iptables")
+	print(iptables_ip)
 	entries_ip = set(list_entries_ips().keys())
 
 	# Fetch the IP addresses in entries list and iptables
