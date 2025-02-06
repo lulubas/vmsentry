@@ -27,20 +27,24 @@ class Config:
     monitoring_interval: int
     http_timeout: int
     host_file: str  # File containing KVM server hostnames
+    suspend_api_url: str  # API endpoint for suspending IPs
+    unsuspend_api_url: str  # API endpoint for unsuspending IPs
 
 class ConfigLoader:
     @staticmethod
     def load_config():
         logging.info("Loading configuration...")
         return Config(
-            smtp_packet_threshold=5000,  # Max allowed packets per VPS
-            smtp_conn_threshold=100,  # Max SMTP connections (SYN packets)
-            smtp_unique_dst_threshold=50,  # Max unique mail servers contacted
+            smtp_packet_threshold=5000,
+            smtp_conn_threshold=100,
+            smtp_unique_dst_threshold=50,
             telegram_api="7611133288:AAGnvY6HLAD-uvGKZEF5iMlrcRymkMdWhSU",
             telegram_chat_id="6995825953",
-            monitoring_interval=20,  # In minutes
-            http_timeout=20,  # Alert sent if response time is 75% of timeout
-            host_file="host.names"  # File containing hostnames
+            monitoring_interval=15,
+            http_timeout=20,
+            host_file="host.names",
+            suspend_api_url="http://{}/suspend_ip",
+            unsuspend_api_url="http://{}/unsuspend_ip"
         )
 
 # Monitor Class
@@ -56,141 +60,105 @@ class Monitor:
             logging.error(f"Host file {self.config.host_file} not found.")
             return []
 
+        hosts = {}
         with open(self.config.host_file, "r") as f:
-            return [line.strip() for line in f if line.strip()]
+            for line in f:
+                parts = line.strip().split(" ")
+                if len(parts) == 2:
+                    hosts[parts[0]] = parts[1].strip('"')
+                else:
+                    logging.error(f"Invalid entry in host file: {line.strip()}")
+        return hosts
 
-    def check_smtp_activity(self, host):
+    def check_smtp_activity(self, host, friendly_name):
         """Checks SMTP statistics for a specific host."""
         api_url = f"http://{host}:5000/smtp_stats"
         logging.info(f"Checking SMTP stats from {api_url}")
 
         try:
-            start_time = time.time()  # Start time before request
+            start_time = time.time()
             response = requests.get(api_url, timeout=self.config.http_timeout)
-            response_time = round(time.time() - start_time, 3)  # Measure response duration (seconds)
+            response_time = round(time.time() - start_time, 3)
 
             if response.status_code != 200:
-                logging.warning(f"{host}: SMTP check failed - HTTP {response.status_code} (Response Time: {response_time}s)")
-                return {
-                    "alerts": f"{host}: SMTP check failed - HTTP {response.status_code}",
-                    "response_time": response_time
-                }
+                logging.warning(f"{friendly_name}: SMTP check failed - HTTP {response.status_code} (Response Time: {response_time}s)")
+                return {"alerts": f"{friendly_name}: SMTP check failed - HTTP {response.status_code}", "response_time": response_time}
 
             data = response.json()
-            if data.get("status") != "OK":
-                logging.warning(f"{host}: Flask API error: {data.get('error', 'Unknown Error')}")
-                return {
-                    "alerts": f"{host}: Flask API error: {data.get('error', 'Unknown Error')}",
-                    "response_time": response_time
-                }
-
             smtp_data = data.get("data", {})
-            logging.info(f"{host}: Raw SMTP Data: {json.dumps(smtp_data, indent=2)}")
+            logging.info(f"{friendly_name}: Raw SMTP Data: {json.dumps(smtp_data, indent=2)}")
 
             alert_message = []
-
             for vps_ip, stats in smtp_data.items():
                 if stats["total_packets"] > self.config.smtp_packet_threshold:
-                    alert_message.append(f"{host} ({vps_ip}): High SMTP traffic detected ({stats['total_packets']} packets).")
+                    alert_message.append(f"{friendly_name} ({vps_ip}): High SMTP traffic detected ({stats['total_packets']} packets).")
+                    self.suspend_ip(host, vps_ip)
                 if stats["syn_packets"] > self.config.smtp_conn_threshold:
-                    alert_message.append(f"{host} ({vps_ip}): High SMTP connections ({stats['syn_packets']} SYNs).")
+                    alert_message.append(f"{friendly_name} ({vps_ip}): High SMTP connections ({stats['syn_packets']} SYNs).")
+                    self.suspend_ip(host, vps_ip)
                 if stats["unique_dst"] > self.config.smtp_unique_dst_threshold:
-                    alert_message.append(f"{host} ({vps_ip}): High unique mail servers contacted ({stats['unique_dst']}).")
+                    alert_message.append(f"{friendly_name} ({vps_ip}): High unique mail servers contacted ({stats['unique_dst']}).")
+                    self.suspend_ip(host, vps_ip)
 
-            return {
-                "alerts": " | ".join(alert_message) if alert_message else None,
-                "raw_data": smtp_data,
-                "response_time": response_time
-            }
+            return {"alerts": " | ".join(alert_message) if alert_message else None, "raw_data": smtp_data, "response_time": response_time}
 
         except requests.exceptions.RequestException as e:
             response_time = round(time.time() - start_time, 3)
-            logging.error(f"{host}: SMTP check request failed after {response_time}s: {e}")
-            return {
-                "alerts": f"{host}: SMTP check request failed: {e}",
-                "response_time": response_time
-            }
+            logging.error(f"{friendly_name}: SMTP check request failed after {response_time}s: {e}")
+            return {"alerts": f"{friendly_name}: SMTP check request failed: {e}", "response_time": response_time}
+
+    def suspend_ip(self, host, ip):
+        """Suspends an IP by sending a request to the API endpoint."""
+        logging.info(f"Suspending IP {ip} on {host}")
+        url = self.config.suspend_api_url.format(host)
+        requests.post(url, json={"ip": ip})
+
+    def unsuspend_ip(self, host, ip):
+        """Unsuspends an IP by sending a request to the API endpoint."""
+        logging.info(f"Unsuspending IP {ip} on {host}")
+        url = self.config.unsuspend_api_url.format(host)
+        requests.post(url, json={"ip": ip})
 
 # Main Application
 class MonitoringTool:
-    def __init__(self, test_mode=False):
-        logging.info(f"Initializing MonitoringTool... Test mode: {test_mode}")
+    def __init__(self, test_mode=False, fetch_mode=False):
+        logging.info(f"Initializing MonitoringTool... Test mode: {test_mode}, Fetch mode: {fetch_mode}")
         self.config = ConfigLoader.load_config()
         self.monitor = Monitor(self.config)
         self.scheduler = BlockingScheduler()
         self.test_mode = test_mode
+        self.fetch_mode = fetch_mode
 
     def run_checks(self):
         """Runs monitoring checks for all KVM hosts."""
         logging.info("Running SMTP monitoring checks...")
-        for host in self.monitor.hosts:
-            result = self.monitor.check_smtp_activity(host)
-
-            # Extract alerts and raw data
-            health_alert = result.get("alerts")
-            raw_data = result.get("raw_data")
-            response_time = result.get("response_time")
-
-            if self.test_mode:
-                message = f"Test Mode: SMTP Data for {host}\nResponse time ={response_time}s\n{json.dumps(raw_data, indent=2)}"
-                logging.info(f"Test Mode - Sending full data via Telegram for {host}")
-                self.send_telegram(message)
-
-            if health_alert:
-                logging.info(f"Sending SMTP alert via Telegram for {host}")
-                self.send_telegram(health_alert)
-
-        # After each check, clear old logs
-        self.clear_old_logs()
+        for host, friendly_name in self.monitor.hosts.items():
+            result = self.monitor.check_smtp_activity(host, friendly_name)
+            if self.fetch_mode or self.test_mode:
+                self.send_telegram(f"Stats for {friendly_name} ({host}):\n{json.dumps(result, indent=2)}")
+            elif result.get("alerts"):
+                self.send_telegram(result["alerts"])
 
     def send_telegram(self, message):
         """Sends alerts via Telegram."""
         try:
             url = f"https://api.telegram.org/bot{self.config.telegram_api}/sendMessage"
             payload = {"chat_id": self.config.telegram_chat_id, "text": message}
-            response = requests.post(url, json=payload)
-
-            if response.status_code != 200:
-                logging.error(f"Telegram API error: {response.status_code}, Response: {response.text}")
+            requests.post(url, json=payload)
         except Exception as e:
             logging.error(f"Failed to send Telegram message: {e}")
 
-    def clear_old_logs(self):
-        """Deletes log entries older than 7 days without affecting new logs."""
-        if not os.path.exists(LOG_FILE):
-            return
-
-        seven_days_ago = datetime.now() - timedelta(days=7)
-        log_lines = []
-
-        with open(LOG_FILE, "r") as file:
-            for line in file:
-                try:
-                    log_timestamp = datetime.strptime(line.split(" | ")[0], "%Y-%m-%d %H:%M:%S")
-                    if log_timestamp >= seven_days_ago:
-                        log_lines.append(line)
-                except ValueError:
-                    log_lines.append(line)  # Keep any malformed lines
-
-        # Write back only recent logs (without replacing file instantly)
-        with open(LOG_FILE, "w") as file:
-            file.writelines(log_lines)
-
     def start(self):
         """Starts the monitoring process."""
-        logging.info(f"Starting KVM SMTP Monitoring Tool (Test Mode: {self.test_mode})...")
-        self.scheduler.add_job(self.run_checks, 'interval', minutes=self.config.monitoring_interval)
-        self.run_checks()  # Run immediately before scheduling starts
-        self.scheduler.start()
+        if self.fetch_mode:
+            self.run_checks()
+        else:
+            self.scheduler.add_job(self.run_checks, 'interval', minutes=self.config.monitoring_interval)
+            self.run_checks()
+            self.scheduler.start()
 
 if __name__ == "__main__":
-    logging.info("Starting the KVM MonitoringTool application...")
-
     test_mode = "--test" in sys.argv
-
-    try:
-        tool = MonitoringTool(test_mode)
-        tool.start()
-    except (KeyboardInterrupt, SystemExit):
-        logging.info("Shutting down the MonitoringTool...")
-        tool.scheduler.shutdown()
+    fetch_mode = "--fetch" in sys.argv
+    tool = MonitoringTool(test_mode, fetch_mode)
+    tool.start()
