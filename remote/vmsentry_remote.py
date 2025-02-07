@@ -27,7 +27,7 @@ def parse_smtp_logs():
             smtp_data[src_ip]["unique_dst"] = len(smtp_data[src_ip]["unique_dst"])
 
     except Exception as e:
-        return {"status" : "KO", "error": str(e)}
+        return {"status" : "KO", "message": str(e)}
 
     return {"status" : "OK", "data" : smtp_data}
 
@@ -51,8 +51,9 @@ def suspend_ip(ip):
         # Insert DROP rule at the top of SMTP_OUT to prevent logging unnecessary traffic
         subprocess.run(f"iptables -I {SMTP_CHAIN} 1 -s {ip} -j DROP", shell=True, check=True)
         return {"status" : "OK", "message": f"IP {ip} has been suspended from sending emails (Port 25 blocked)."}
+    
     except subprocess.CalledProcessError as e:
-        return {"status" : "KO", "error": str(e)}
+        return {"status" : "KO", "message": str(e)}
 
 
 def unsuspend_ip(ip):
@@ -64,7 +65,7 @@ def unsuspend_ip(ip):
         subprocess.run(f"iptables -D {SMTP_CHAIN} -s {ip} -j DROP", shell=True, check=False)
         return {"status" : "OK", "message": f"IP {ip} has been unsuspended (Port 25 unblocked)."}
     except subprocess.CalledProcessError as e:
-        return {"status" : "KO", "error": str(e)}
+        return {"status" : "KO", "message": str(e)}
 
 @app.route("/smtp_stats", methods=["GET"])
 def smtp_stats():
