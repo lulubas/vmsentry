@@ -7,7 +7,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 class MonitoringTool:
     def __init__(self):
         self.logger = Logger.load_logger()
-        logger.info("Initializing MonitoringTool...")
+        self.logger.info("Initializing MonitoringTool...")
         self.config = ConfigLoader.load_config()
         self.monitor = Monitor(self.logger, self.config)
         self.scheduler = BlockingScheduler()

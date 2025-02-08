@@ -2,7 +2,6 @@ from config import Config
 import os
 import requests
 import json
-import time
 from datetime import datetime, timedelta
 
 
