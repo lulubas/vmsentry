@@ -1,0 +1,12 @@
+[Unit]
+Description=VMsentry Service
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /etc/vmsentry/server/srcs/vmsentry.py
+WorkingDirectory=/etc/vmsentry/server/srcs/
+Restart=always
+User=root
+
+[Install]
+WantedBy=multi-user.target

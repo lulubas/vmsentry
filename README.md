@@ -40,3 +40,24 @@ Our team is actively working to develop this tool further. Our plans for the fut
 - Extending support for additional Linux distributions and routing setups.
 
 Please stay tuned for these exciting updates!
+
+
+##REMOTE SERVER INSTALLATION##
+Install on a new KVM server : 
+-Install mkdir /etc/vmsentry-remote
+-Copy content of vmsentry-remote.py
+-Create and copy content of vmsentry-remote.service in /etc/systemd/system/
+-systemctl daemon-reload
+-systemctl enable vmsentry-remote
+-systemctl start vmsentry-remote
+-systemctl status vmsentry-remote
+
+-Add iptables rules :
+iptables -N SMTP_OUT
+iptables -I LIBVIRT_FWO 1 -i natbrXX -p tcp --dport 25 -j SMTP_OUT  #replace with the correct 1st natbr interface
+iptables -I LIBVIRT_FWO 1 -i natbrXX -p tcp --dport 25 -j SMTP_OUT  #replace with the correct 2nd natbr interface
+iptables -A SMTP_OUT -j LOG --log-prefix "[SMTP_OUT] " --log-level 4
+iptables -A SMTP_OUT -j ACCEPT
+
+-Add the right content in /etc/rsyslog.d/
+-systemctl restart rsyslog

@@ -3,6 +3,7 @@ import os
 import requests
 import json
 from datetime import datetime, timedelta
+from notification import Notification
 
 
 # Monitor Class
@@ -11,6 +12,7 @@ class Monitor:
         self.logger = logger
         self.logger.info("Initializing KVM SMTP Monitor...")
         self.config = config
+        self.notification = Notification(self.logger, self.config)
         self.host_file = "../conf/host.names"
         self.blocked_file = "blocked_ips.json"
         self.hosts = self.load_hosts()
@@ -37,11 +39,15 @@ class Monitor:
         """Loads a record of blocked IPs with timestamps."""
         blocked_ips = {}
         if os.path.exists(self.blocked_file):
-            with open(self.blocked_file, "r") as f:
-                try:
-                    blocked_ips = json.load(f)
-                except json.JSONDecodeError:
-                    self.logger.warning("Blocked IPs file is corrupted. Starting from blank")
+            if os.path.getsize(self.blocked_file) > 0:  # Check if file is not empty
+                with open(self.blocked_file, "r") as f:
+                    try:
+                        blocked_ips = json.load(f)
+                    except json.JSONDecodeError:
+                        self.logger.warning("Blocked IPs file is corrupted. Starting from blank")
+            else:
+                self.logger.warning("Blocked IPs file is empty. Continuing")
+
         return blocked_ips
 
     def save_blocked_ips(self):
@@ -49,12 +55,21 @@ class Monitor:
         with open(self.blocked_file, "w") as f:
             json.dump(self.blocked_ips, f, indent=2)
     
-    def check_all_hosts(self):
+    def check_all_hosts(self, test_mode=False):
         """Calls for monitoring and action dispatchers on hosts"""
         #Iterates over each host to fetch SMTP data
+        if test_mode == True:
+            self.logger.info("Test mode: Only raw SMTP data will be notified for all hosts")
+        else:
+            self.logger.info("==Checking SMTP data from all hosts==")
+
         for host in self.hosts:
             try:
                 smtp_data = self.fetch_smtp_activity(host)
+
+                if test_mode:
+                    self.notification.send_message(f"SMTP data for {host}:\n{smtp_data}")
+                    continue
 
                 #iterates over each IP that has SMTP traffic and take actions if necessary
                 for ip, stats in smtp_data.items():
@@ -82,7 +97,7 @@ class Monitor:
                         self.unsuspend_ip(host, ip)
 
             except Exception as e:
-                self.logger.error(f"{host}: Failed to fetch SMTP data: {e}")
+                self.logger.error(f"{host}: Error while running VMSentry. Error : {e}")
         
                 
     def fetch_smtp_activity(self, host):
@@ -121,7 +136,7 @@ class Monitor:
         self.logger.info(f"Suspending IP from {url}")
 
         try:
-            response = requests.get(url, timeout=self.config.http_timeout)
+            response = requests.post(url, timeout=self.config.http_timeout)
             response.raise_for_status()  # Automatically raises an exception for non-200 responses
         except requests.RequestException as e:
             raise Exception(f"Failed to reach {url}: {e}")
@@ -131,13 +146,15 @@ class Monitor:
 
         #Stop execution if remote server returned error
         if (data.get("status") != "OK"):
-            raise Exception(f"Remote server failed to suspend IP {ip} : {data.get("message")}")
+            raise Exception(f"Remote server failed to suspend IP {ip} : {data.get('message')}")
         self.logger.info(f"IP {ip} has been suspended")
 
         #Add the blocked IP and timestamp to the tracker file
         self.blocked_ips[ip] = datetime.now().isoformat()
         self.save_blocked_ips()
         self.logger.info(f"IP {ip} has been added to the blocked IP logfile")
+        
+        self.notification.send_message(f"IP {ip} has been suspended")
 
     def should_unsuspend(self, ip):
         """Checks if an IP should be unblocked based on time."""
@@ -164,18 +181,18 @@ class Monitor:
         self.logger.info(f"Unuspending IP from {url}")
 
         try:
-            response = requests.get(url, timeout=self.config.http_timeout)
+            response = requests.post(url, timeout=self.config.http_timeout)
             response.raise_for_status()  # Automatically raises an exception for non-200 responses
         except requests.RequestException as e:
             raise Exception(f"Failed to reach {url}: {e}")
 
         data = response.json() 
-        self.logger.info(f"Suspend API Response: {json.dumps(data)}")
+        self.logger.info(f"Unsuspend API Response: {json.dumps(data)}")
 
         #Stop execution if remote server returned error
         if (data.get("status") != "OK"):
-            raise Exception(f"Remote server failed to suspend IP {ip} : {data.get("message")}")
-        self.logger.info(f"IP {ip} has been unsuspended")
+            raise Exception(f"Remote server failed to suspend IP {ip} : {data.get('message')}")
+        self.logger.info(f"{host}: IP {ip} has been unsuspended")
 
         #Removed the blocked IP and timestamp to the tracker file
         self.blocked_ips.pop(ip, None)

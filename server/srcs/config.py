@@ -7,8 +7,8 @@ CONFIG_FILE = "../conf/vmsentry.conf"
 
 @dataclass
 class Config:
-    smtp_packet_limit: int
-    smtp_conn_limit: int
+    smtp_packets_limit: int
+    smtp_connections_limit: int
     smtp_unique_dst_limit: int
     monitoring_interval: int
     http_timeout: int
@@ -30,8 +30,8 @@ class ConfigLoader:
             monitoring_interval=int(config.get('Monitoring', 'monitoring_interval')),
             http_timeout=int(config.get('Monitoring', 'http_timeout')),
             block_duration=int(config.get('Monitoring', 'block_duration')),
-            telegram_api=int(config.get('Notification', 'telegram_api')),
-            telegram_chat_id=int(config.get('Notification', 'telegram_chat_id')),
+            telegram_api=str(config.get('Notification', 'telegram_api')),
+            telegram_chat_id=str(config.get('Notification', 'telegram_chat_id')),
         )
 
         # Check that each configurations fits into the pre-determined limits
@@ -48,3 +48,5 @@ class ConfigLoader:
             value = getattr(conf, limit)
             if not (low <= value <= high):
                 raise ValueError(f"The value for {limit} ({value}) is not within the allowed range ({low}-{high}).")
+        
+        return conf

@@ -1,0 +1,12 @@
+[Unit]
+Description=VMsentry Remote Service
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /etc/vmsentry-remote/vmsentry-remote.py
+WorkingDirectory=/etc/vmsentry-remote/
+Restart=always
+User=root
+
+[Install]
+WantedBy=multi-user.target
